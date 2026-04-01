@@ -1,6 +1,6 @@
 # kubecontext
 
-Interaktives TUI-Tool zur Verwaltung von Kubernetes-Kontexten in `~/.kube/config`. Es ermöglicht das Importieren von Kubeconfigs von Remote-Servern per SSH, das Wechseln des aktiven Kontexts, das Löschen von Kontexten sowie die Validierung der Cluster-Erreichbarkeit – alles über ein einfaches Auswahlmenü im Terminal.
+Interaktives TUI-Tool zur Verwaltung von Kubernetes-Kontexten in `~/.kube/config`. Es ermöglicht das Importieren von Kubeconfigs von Remote-Servern per SSH, das Verwalten von SSH-Tunneln, das Wechseln des aktiven Kontexts, das Löschen von Kontexten sowie die Validierung der Cluster-Erreichbarkeit – alles über ein einfaches Auswahlmenü im Terminal.
 
 ## Voraussetzungen
 
@@ -60,10 +60,22 @@ Nach dem Start wird eine Tabelle aller vorhandenen Kontexte angezeigt, gefolgt v
 Lädt die `~/.kube/config` eines Remote-Servers per SSH herunter und merged sie in die lokale Kubeconfig.
 
 - Die verfügbaren Hosts werden aus `~/.ssh/config` gelesen (keine Wildcard-Einträge).
-- Kontexte, Cluster und User werden auf den SSH-Hostnamen umbenannt. Bei mehreren Kontexten wird der ursprüngliche Name als Suffix angehängt (`hostname-originalname`).
+- Kontexte, Cluster und User werden auf den SSH-Hostnamen umbenannt. Der ursprüngliche Name wird mit `@` getrennt angehängt (`hostname@originalname`).
 - Vor dem Schreiben wird eine Vorschau der zusammengeführten Config angezeigt.
 - Bestehende Einträge mit gleichem Namen werden überschrieben.
 - Es wird automatisch ein Backup angelegt (`~/.kube/config.backup.<timestamp>`).
+
+---
+
+### Tunnels
+
+Verwaltet SSH-Port-Forwards für per SSH importierte Kontexte.
+
+- Zeigt eine Übersicht aller SSH-importierten Kontexte (Kontextname enthält `@`) mit aktuellem Tunnel-Status (`● open` / `○ closed` / `? no port`).
+- Tunnels werden als lokale Port-Forwards aufgebaut: `localhost:<port> → <ssh-host>:<remote-host>:<port>`.
+- Der Tunnel-Zustand wird in `~/.kube/kubecontext_tunnels.json` gespeichert und beim nächsten Start wiederhergestellt (noch laufende Prozesse bleiben erhalten, beendete werden entfernt).
+- Beim Beenden des Programms wird gefragt, ob laufende Tunnels offen bleiben sollen.
+- Erfordert `ssh` im `PATH`.
 
 ---
 
