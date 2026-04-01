@@ -16,7 +16,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 import tools_context
-from tools_context import get_list, load_kubeconfig, merge_configs, rename_config_for_host, save_kubeconfig
+from tools_context import filter_contexts, get_list, load_kubeconfig, merge_configs, rename_config_for_host, save_kubeconfig
 from tools_ssh import (
     close_tunnel,
     download_remote_kubeconfig,
@@ -47,6 +47,18 @@ def ssh_import_menu() -> None:
         return
 
     renamed   = rename_config_for_host(remote, hostname)
+    all_names = [c["name"] for c in get_list(renamed, "contexts")]
+
+    if len(all_names) > 1:
+        selected_names = questionary.checkbox(
+            "Select contexts to import:",
+            choices=all_names,
+            validate=lambda v: True if v else "Select at least one context",
+        ).ask()
+        if not selected_names:
+            return
+        renamed = filter_contexts(renamed, selected_names)
+
     new_names = [c["name"] for c in get_list(renamed, "contexts")]
 
     console.print("\n[bold]Contexts to import:[/bold]")
