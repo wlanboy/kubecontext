@@ -94,6 +94,21 @@ def rename_config_for_host(remote: dict, hostname: str) -> dict:
     return cfg
 
 
+def filter_contexts(config: dict, keep: list[str]) -> dict:
+    """Return a copy of config containing only the named contexts and their clusters/users."""
+    cfg      = copy.deepcopy(config)
+    keep_set = set(keep)
+    contexts = [c for c in get_list(cfg, "contexts") if c["name"] in keep_set]
+    used_clusters = {(c.get("context") or {}).get("cluster") for c in contexts}
+    used_users    = {(c.get("context") or {}).get("user")    for c in contexts}
+    cfg["contexts"] = contexts
+    cfg["clusters"] = [c for c in get_list(cfg, "clusters") if c["name"] in used_clusters]
+    cfg["users"]    = [u for u in get_list(cfg, "users")    if u["name"] in used_users]
+    if cfg.get("current-context") not in keep_set:
+        cfg["current-context"] = keep[0] if keep else ""
+    return cfg
+
+
 def merge_configs(base: dict, overlay: dict) -> dict:
     """Merge overlay into a deep copy of base. Items with the same name are overwritten."""
     merged = copy.deepcopy(base)
