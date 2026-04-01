@@ -129,6 +129,118 @@ class TestDeleteContextMenu:
         assert saved["contexts"] == []
 
 
+class TestExportContextsMenu:
+    def test_exports_single_context_to_file(self, kubeconfig_file, tmp_path):
+        out = tmp_path / "exported.yaml"
+        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("main.questionary.checkbox") as mock_chk, \
+             patch("main.questionary.text")     as mock_txt:
+            mock_chk.return_value.ask.return_value = ["dev"]
+            mock_txt.return_value.ask.return_value = str(out)
+            main.export_contexts_menu()
+
+        saved = yaml.safe_load(out.read_text())
+        assert [c["name"] for c in saved["contexts"]] == ["dev"]
+        assert saved["current-context"] == "dev"
+
+    def test_export_includes_only_selected_cluster_and_user(self, kubeconfig_file, tmp_path):
+        out = tmp_path / "exported.yaml"
+        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("main.questionary.checkbox") as mock_chk, \
+             patch("main.questionary.text")     as mock_txt:
+            mock_chk.return_value.ask.return_value = ["prod"]
+            mock_txt.return_value.ask.return_value = str(out)
+            main.export_contexts_menu()
+
+        saved = yaml.safe_load(out.read_text())
+        assert [c["name"] for c in saved["clusters"]] == ["prod-cluster"]
+        assert [u["name"] for u in saved["users"]]    == ["prod-user"]
+
+    def test_export_sets_permissions_600(self, kubeconfig_file, tmp_path):
+        out = tmp_path / "exported.yaml"
+        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("main.questionary.checkbox") as mock_chk, \
+             patch("main.questionary.text")     as mock_txt:
+            mock_chk.return_value.ask.return_value = ["dev"]
+            mock_txt.return_value.ask.return_value = str(out)
+            main.export_contexts_menu()
+
+        assert oct(out.stat().st_mode)[-3:] == "600"
+
+    def test_export_prints_to_stdout_when_no_path(self, kubeconfig_file):
+        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("main.questionary.checkbox") as mock_chk, \
+             patch("main.questionary.text")     as mock_txt:
+            mock_chk.return_value.ask.return_value = ["dev"]
+            mock_txt.return_value.ask.return_value = ""  # empty → stdout
+            main.export_contexts_menu()  # must not raise
+
+    def test_export_overwrites_existing_file_on_confirm(self, kubeconfig_file, tmp_path):
+        out = tmp_path / "exported.yaml"
+        out.write_text("old content")
+        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("main.questionary.checkbox") as mock_chk, \
+             patch("main.questionary.text")     as mock_txt, \
+             patch("main.questionary.confirm")  as mock_conf:
+            mock_chk.return_value.ask.return_value  = ["dev"]
+            mock_txt.return_value.ask.return_value  = str(out)
+            mock_conf.return_value.ask.return_value = True
+            main.export_contexts_menu()
+
+        saved = yaml.safe_load(out.read_text())
+        assert [c["name"] for c in saved["contexts"]] == ["dev"]
+
+    def test_export_aborts_when_overwrite_declined(self, kubeconfig_file, tmp_path):
+        out = tmp_path / "exported.yaml"
+        out.write_text("old content")
+        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("main.questionary.checkbox") as mock_chk, \
+             patch("main.questionary.text")     as mock_txt, \
+             patch("main.questionary.confirm")  as mock_conf:
+            mock_chk.return_value.ask.return_value  = ["dev"]
+            mock_txt.return_value.ask.return_value  = str(out)
+            mock_conf.return_value.ask.return_value = False
+            main.export_contexts_menu()
+
+        assert out.read_text() == "old content"
+
+    def test_export_cancelled_checkbox_does_not_write(self, kubeconfig_file, tmp_path):
+        out = tmp_path / "exported.yaml"
+        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("main.questionary.checkbox") as mock_chk:
+            mock_chk.return_value.ask.return_value = None
+            main.export_contexts_menu()
+
+        assert not out.exists()
+
+    def test_empty_config_does_not_prompt(self, tmp_path):
+        with patch("tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
+             patch("main.questionary.checkbox") as mock_chk:
+            main.export_contexts_menu()
+        mock_chk.assert_not_called()
+
+    def test_single_context_skips_checkbox(self, tmp_path):
+        cfg = {
+            "apiVersion": "v1", "kind": "Config", "preferences": {},
+            "clusters":  [{"name": "only", "cluster": {"server": "https://x:6443"}}],
+            "contexts":  [{"name": "only", "context": {"cluster": "only", "user": "u"}}],
+            "users":     [{"name": "u", "user": {}}],
+            "current-context": "only",
+        }
+        p = tmp_path / "config"
+        p.write_text(yaml.dump(cfg))
+        out = tmp_path / "exported.yaml"
+
+        with patch("tools_context.KUBECONFIG_PATH", p), \
+             patch("main.questionary.checkbox") as mock_chk, \
+             patch("main.questionary.text")     as mock_txt:
+            mock_txt.return_value.ask.return_value = str(out)
+            main.export_contexts_menu()
+
+        mock_chk.assert_not_called()
+        assert out.exists()
+
+
 class TestValidateContextsMenu:
     def test_skips_when_kubectl_missing(self):
         with patch("main.shutil.which", return_value=None):

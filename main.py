@@ -277,6 +277,57 @@ def ssh_tunnel_menu() -> None:
                 console.print("[green]✓ Tunnel closed[/green]")
 
 
+# ── Export Contexts ───────────────────────────────────────────────────────────
+
+def export_contexts_menu() -> None:
+    config   = load_kubeconfig()
+    contexts = get_list(config, "contexts")
+    if not contexts:
+        console.print("[yellow]No contexts found.[/yellow]")
+        return
+
+    all_names = [c["name"] for c in contexts]
+
+    if len(all_names) == 1:
+        selected_names = all_names
+    else:
+        selected_names = questionary.checkbox(
+            "Select contexts to export:",
+            choices=all_names,
+            validate=lambda v: True if v else "Select at least one context",
+        ).ask()
+        if not selected_names:
+            return
+
+    exported = tools_context.filter_contexts(config, selected_names)
+    # reset current-context to first selected
+    exported["current-context"] = selected_names[0]
+
+    out_path_str = questionary.text(
+        "Export to file (leave empty to print to stdout):",
+    ).ask()
+    if out_path_str is None:
+        return
+
+    export_yaml = yaml.dump(exported, default_flow_style=False, allow_unicode=True)
+
+    if not out_path_str.strip():
+        console.print("\n[bold]Exported kubeconfig:[/bold]")
+        console.print(Syntax(export_yaml, "yaml", theme="monokai", line_numbers=True))
+        return
+
+    out_path = Path(out_path_str.strip()).expanduser()
+    if out_path.exists():
+        if not questionary.confirm(f"{out_path} already exists — overwrite?", default=False).ask():
+            console.print("[dim]Aborted.[/dim]")
+            return
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(export_yaml)
+    out_path.chmod(0o600)
+    console.print(f"[green]✓ Exported {len(selected_names)} context(s) to {out_path}[/green]")
+
+
 # ── Validate Contexts ─────────────────────────────────────────────────────────
 
 def validate_contexts_menu() -> None:
@@ -384,6 +435,7 @@ def main() -> None:
         questionary.Choice("  SSH Import   download & merge remote kubeconfig", value="import"),
         questionary.Choice("  Tunnels      manage SSH port forwarding",          value="tunnels"),
         questionary.Choice("  Set context  switch active context",               value="set"),
+        questionary.Choice("  Export       write context(s) to a file",          value="export"),
         questionary.Choice("  Delete       remove a context",                    value="delete"),
         questionary.Choice("  Validate     check cluster connectivity",          value="validate"),
         questionary.Separator(),
@@ -408,6 +460,8 @@ def main() -> None:
                 ssh_tunnel_menu()
             case "set":
                 set_current_context_menu()
+            case "export":
+                export_contexts_menu()
             case "delete":
                 delete_context_menu()
             case "validate":
