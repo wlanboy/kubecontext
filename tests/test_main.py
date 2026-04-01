@@ -188,8 +188,8 @@ class TestSshImportMenu:
 
         saved = load_kubeconfig(kubeconfig)
         names = [c["name"] for c in saved["contexts"]]
-        assert "bastion" in names
-        assert "prod"    in names
+        assert "bastion@default" in names
+        assert "prod"            in names
 
     def test_aborted_does_not_change_config(self, tmp_path, ssh_config_file):
         kubeconfig = tmp_path / "config"
@@ -206,7 +206,7 @@ class TestSshImportMenu:
             main.ssh_import_menu()
 
         saved = load_kubeconfig(kubeconfig)
-        assert "bastion" not in [c["name"] for c in saved["contexts"]]
+        assert "bastion@default" not in [c["name"] for c in saved["contexts"]]
 
     def test_no_hosts_does_not_prompt(self, tmp_path):
         empty = tmp_path / "ssh_config"
@@ -247,12 +247,13 @@ class TestSshImportMenu:
         mock_backup.assert_called_once()
 
     def test_overwrites_existing_context_with_same_name(self, tmp_path, ssh_config_file):
+        # context name now uses @ scheme: "bastion@default"
         existing = {
             **_empty_config(),
-            "clusters":  [{"name": "bastion", "cluster": {"server": "https://old:6443"}}],
-            "contexts":  [{"name": "bastion", "context": {"cluster": "bastion", "user": "bastion"}}],
-            "users":     [{"name": "bastion", "user": {}}],
-            "current-context": "bastion",
+            "clusters":  [{"name": "bastion@default", "cluster": {"server": "https://old:6443"}}],
+            "contexts":  [{"name": "bastion@default", "context": {"cluster": "bastion@default", "user": "bastion@admin"}}],
+            "users":     [{"name": "bastion@admin", "user": {}}],
+            "current-context": "bastion@default",
         }
         kubeconfig = tmp_path / "config"
         kubeconfig.write_text(yaml.dump(existing))
@@ -267,7 +268,7 @@ class TestSshImportMenu:
             mock_conf.return_value.ask.return_value = True
             main.ssh_import_menu()
 
-        saved = load_kubeconfig(kubeconfig)
-        cluster = next(c for c in saved["clusters"] if c["name"] == "bastion")
+        saved   = load_kubeconfig(kubeconfig)
+        cluster = next(c for c in saved["clusters"] if c["name"] == "bastion@default")
         assert cluster["cluster"]["server"] == "https://192.168.1.1:6443"
-        assert len([c for c in saved["contexts"] if c["name"] == "bastion"]) == 1
+        assert len([c for c in saved["contexts"] if c["name"] == "bastion@default"]) == 1

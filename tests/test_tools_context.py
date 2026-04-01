@@ -85,44 +85,46 @@ class TestBackupKubeconfig:
 
 
 class TestRenameConfigForHost:
-    def test_single_context_becomes_hostname(self):
+    # Single context: always "host@original" now
+    def test_single_context_becomes_host_at_original(self):
         renamed = ctx.rename_config_for_host(REMOTE_SINGLE, "my-server")
-        assert renamed["contexts"][0]["name"] == "my-server"
-        assert renamed["clusters"][0]["name"] == "my-server"
-        assert renamed["users"][0]["name"]    == "my-server"
+        assert renamed["contexts"][0]["name"] == "my-server@default"
+        assert renamed["clusters"][0]["name"] == "my-server@default"
+        assert renamed["users"][0]["name"]    == "my-server@admin"
 
     def test_single_context_cross_references_updated(self):
         renamed = ctx.rename_config_for_host(REMOTE_SINGLE, "my-server")
         ref = renamed["contexts"][0]["context"]
-        assert ref["cluster"] == "my-server"
-        assert ref["user"]    == "my-server"
+        assert ref["cluster"] == "my-server@default"
+        assert ref["user"]    == "my-server@admin"
 
     def test_single_context_current_context_updated(self):
         renamed = ctx.rename_config_for_host(REMOTE_SINGLE, "my-server")
-        assert renamed["current-context"] == "my-server"
+        assert renamed["current-context"] == "my-server@default"
 
+    # Multi context: "host@original"
     def test_multi_context_prefixed_with_hostname(self):
         renamed = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
         names = [c["name"] for c in renamed["contexts"]]
-        assert "edge-alpha" in names
-        assert "edge-beta"  in names
+        assert "edge@alpha" in names
+        assert "edge@beta"  in names
 
     def test_multi_context_clusters_and_users_prefixed(self):
         renamed = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
-        assert "edge-alpha"      in [c["name"] for c in renamed["clusters"]]
-        assert "edge-beta"       in [c["name"] for c in renamed["clusters"]]
-        assert "edge-alpha-user" in [u["name"] for u in renamed["users"]]
-        assert "edge-beta-user"  in [u["name"] for u in renamed["users"]]
+        assert "edge@alpha"      in [c["name"] for c in renamed["clusters"]]
+        assert "edge@beta"       in [c["name"] for c in renamed["clusters"]]
+        assert "edge@alpha-user" in [u["name"] for u in renamed["users"]]
+        assert "edge@beta-user"  in [u["name"] for u in renamed["users"]]
 
     def test_multi_context_cross_references_consistent(self):
         renamed = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
-        c = next(x for x in renamed["contexts"] if x["name"] == "edge-alpha")
-        assert c["context"]["cluster"] == "edge-alpha"
-        assert c["context"]["user"]    == "edge-alpha-user"
+        c = next(x for x in renamed["contexts"] if x["name"] == "edge@alpha")
+        assert c["context"]["cluster"] == "edge@alpha"
+        assert c["context"]["user"]    == "edge@alpha-user"
 
     def test_multi_context_current_context_updated(self):
         renamed = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
-        assert renamed["current-context"] == "edge-alpha"
+        assert renamed["current-context"] == "edge@alpha"
 
     def test_does_not_mutate_original(self):
         original = copy.deepcopy(REMOTE_SINGLE)
@@ -135,7 +137,7 @@ class TestMergeConfigs:
         base    = ctx._empty_config()
         overlay = ctx.rename_config_for_host(REMOTE_SINGLE, "new-host")
         merged  = ctx.merge_configs(base, overlay)
-        assert "new-host" in [c["name"] for c in merged["contexts"]]
+        assert "new-host@default" in [c["name"] for c in merged["contexts"]]
 
     def test_preserves_existing_base_contexts(self):
         base = {
@@ -146,20 +148,21 @@ class TestMergeConfigs:
         overlay = ctx.rename_config_for_host(REMOTE_SINGLE, "new-host")
         merged  = ctx.merge_configs(base, overlay)
         names   = [c["name"] for c in merged["contexts"]]
-        assert "existing" in names
-        assert "new-host" in names
+        assert "existing"         in names
+        assert "new-host@default" in names
 
     def test_overlay_overwrites_same_name(self):
-        base_ctx = {"name": "my-server", "context": {"cluster": "old", "user": "old-user"}}
+        # existing context uses the new naming scheme
+        base_ctx = {"name": "my-server@default", "context": {"cluster": "old", "user": "old-user"}}
         base     = {
             "clusters": [], "users": [], "preferences": {},
             "contexts": [base_ctx],
-            "current-context": "my-server",
+            "current-context": "my-server@default",
         }
         overlay = ctx.rename_config_for_host(REMOTE_SINGLE, "my-server")
         merged  = ctx.merge_configs(base, overlay)
-        c       = next(x for x in merged["contexts"] if x["name"] == "my-server")
-        assert c["context"]["cluster"] == "my-server"  # from overlay, not "old"
+        c       = next(x for x in merged["contexts"] if x["name"] == "my-server@default")
+        assert c["context"]["cluster"] == "my-server@default"  # from overlay, not "old"
 
     def test_no_duplicate_entries(self):
         overlay = ctx.rename_config_for_host(REMOTE_SINGLE, "host-a")
