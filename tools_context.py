@@ -67,10 +67,8 @@ def rename_config_for_host(remote: dict, hostname: str) -> dict:
     contexts = get_list(cfg, "contexts")
     clusters = get_list(cfg, "clusters")
     users    = get_list(cfg, "users")
-    multi    = len(contexts) > 1
-
     def new_name(original: str) -> str:
-        return f"{hostname}-{original}" if multi else hostname
+        return f"{hostname}@{original}"
 
     cluster_map = {c["name"]: new_name(c["name"]) for c in clusters}
     user_map    = {u["name"]: new_name(u["name"]) for u in users}
