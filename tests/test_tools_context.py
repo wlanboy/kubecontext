@@ -132,6 +132,48 @@ class TestRenameConfigForHost:
         assert REMOTE_SINGLE["contexts"][0]["name"] == original["contexts"][0]["name"]
 
 
+class TestFilterContexts:
+    def test_keeps_selected_context(self):
+        renamed  = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
+        filtered = ctx.filter_contexts(renamed, ["edge@alpha"])
+        names    = [c["name"] for c in filtered["contexts"]]
+        assert names == ["edge@alpha"]
+        assert "edge@beta" not in names
+
+    def test_removes_orphan_cluster_and_user(self):
+        renamed  = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
+        filtered = ctx.filter_contexts(renamed, ["edge@alpha"])
+        cluster_names = [c["name"] for c in filtered["clusters"]]
+        user_names    = [u["name"] for u in filtered["users"]]
+        assert "edge@alpha"      in cluster_names
+        assert "edge@beta"       not in cluster_names
+        assert "edge@alpha-user" in user_names
+        assert "edge@beta-user"  not in user_names
+
+    def test_keeps_multiple_selected(self):
+        renamed  = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
+        filtered = ctx.filter_contexts(renamed, ["edge@alpha", "edge@beta"])
+        assert len(filtered["contexts"]) == 2
+        assert len(filtered["clusters"]) == 2
+
+    def test_current_context_updated_when_not_in_selection(self):
+        renamed  = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
+        # current-context is "edge@alpha"; keep only beta
+        filtered = ctx.filter_contexts(renamed, ["edge@beta"])
+        assert filtered["current-context"] == "edge@beta"
+
+    def test_current_context_preserved_when_in_selection(self):
+        renamed  = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
+        filtered = ctx.filter_contexts(renamed, ["edge@alpha", "edge@beta"])
+        assert filtered["current-context"] == "edge@alpha"
+
+    def test_does_not_mutate_original(self):
+        renamed  = ctx.rename_config_for_host(REMOTE_MULTI, "edge")
+        original = copy.deepcopy(renamed)
+        ctx.filter_contexts(renamed, ["edge@alpha"])
+        assert len(renamed["contexts"]) == len(original["contexts"])
+
+
 class TestMergeConfigs:
     def test_adds_new_contexts_from_overlay(self):
         base    = ctx._empty_config()

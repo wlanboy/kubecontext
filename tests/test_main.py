@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import yaml
 
 import main
-from conftest import REMOTE_SINGLE, SAMPLE_KUBECONFIG, make_mock_ssh_client
+from conftest import REMOTE_MULTI, REMOTE_SINGLE, SAMPLE_KUBECONFIG, make_mock_ssh_client
 from tools_context import load_kubeconfig, _empty_config
 
 
@@ -272,3 +272,41 @@ class TestSshImportMenu:
         cluster = next(c for c in saved["clusters"] if c["name"] == "bastion@default")
         assert cluster["cluster"]["server"] == "https://192.168.1.1:6443"
         assert len([c for c in saved["contexts"] if c["name"] == "bastion@default"]) == 1
+
+    def test_multi_context_shows_checkbox_and_imports_selection(self, tmp_path, ssh_config_file):
+        kubeconfig = tmp_path / "config"
+        kubeconfig.write_text(yaml.dump(SAMPLE_KUBECONFIG))
+        client = make_mock_ssh_client(yaml.dump(REMOTE_MULTI).encode())
+
+        with patch("tools_context.KUBECONFIG_PATH", kubeconfig), \
+             patch("tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
+             patch("tools_ssh.paramiko.SSHClient",  return_value=client), \
+             patch("main.questionary.select")    as mock_sel, \
+             patch("main.questionary.checkbox")  as mock_chk, \
+             patch("main.questionary.confirm")   as mock_conf:
+            mock_sel.return_value.ask.return_value  = "bastion"
+            mock_chk.return_value.ask.return_value  = ["bastion@alpha"]
+            mock_conf.return_value.ask.return_value = True
+            main.ssh_import_menu()
+
+        saved = load_kubeconfig(kubeconfig)
+        names = [c["name"] for c in saved["contexts"]]
+        assert "bastion@alpha" in names
+        assert "bastion@beta"  not in names
+
+    def test_multi_context_cancelled_checkbox_does_not_write(self, tmp_path, ssh_config_file):
+        kubeconfig = tmp_path / "config"
+        kubeconfig.write_text(yaml.dump(SAMPLE_KUBECONFIG))
+        client = make_mock_ssh_client(yaml.dump(REMOTE_MULTI).encode())
+
+        with patch("tools_context.KUBECONFIG_PATH", kubeconfig), \
+             patch("tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
+             patch("tools_ssh.paramiko.SSHClient",  return_value=client), \
+             patch("main.questionary.select")   as mock_sel, \
+             patch("main.questionary.checkbox") as mock_chk, \
+             patch("tools_context.save_kubeconfig") as mock_save:
+            mock_sel.return_value.ask.return_value = "bastion"
+            mock_chk.return_value.ask.return_value = None  # Ctrl+C / cancelled
+            main.ssh_import_menu()
+
+        mock_save.assert_not_called()
