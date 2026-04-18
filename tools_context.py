@@ -58,11 +58,7 @@ def backup_kubeconfig() -> Path | None:
 
 
 def rename_config_for_host(remote: dict, hostname: str) -> dict:
-    """
-    Rename all contexts/clusters/users to use hostname as the base name.
-    Single context  → 'hostname'
-    Multiple contexts → 'hostname-{original}'
-    """
+    """Rename all contexts/clusters/users to 'hostname@original'."""
     cfg = copy.deepcopy(remote)
     contexts = get_list(cfg, "contexts")
     clusters = get_list(cfg, "clusters")
