@@ -422,3 +422,84 @@ class TestSshImportMenu:
             main.ssh_import_menu()
 
         mock_save.assert_not_called()
+
+
+class TestSshContexts:
+    def _make_config(self, contexts, clusters):
+        return {
+            "apiVersion": "v1", "kind": "Config", "preferences": {},
+            "contexts": contexts,
+            "clusters": clusters,
+            "users": [],
+            "current-context": "",
+        }
+
+    def test_returns_ssh_contexts_with_at_in_name(self, tmp_path):
+        cfg = self._make_config(
+            contexts=[{"name": "bastion@default", "context": {"cluster": "bastion@default", "user": "u"}}],
+            clusters=[{"name": "bastion@default", "cluster": {"server": "https://192.168.1.1:6443"}}],
+        )
+        with patch("tools_context.KUBECONFIG_PATH", tmp_path / "c"):
+            (tmp_path / "c").write_text(yaml.dump(cfg))
+            with patch("main.load_kubeconfig", return_value=cfg):
+                result = main._ssh_contexts()
+        assert len(result) == 1
+        assert result[0]["context"] == "bastion@default"
+        assert result[0]["ssh_host"] == "bastion"
+        assert result[0]["remote_host"] == "192.168.1.1"
+        assert result[0]["port"] == 6443
+
+    def test_excludes_contexts_without_at(self, tmp_path):
+        cfg = self._make_config(
+            contexts=[{"name": "local", "context": {"cluster": "local", "user": "u"}}],
+            clusters=[{"name": "local", "cluster": {"server": "https://localhost:6443"}}],
+        )
+        with patch("main.load_kubeconfig", return_value=cfg):
+            result = main._ssh_contexts()
+        assert result == []
+
+    def test_handles_missing_port_in_server_url(self):
+        cfg = {
+            "apiVersion": "v1", "kind": "Config", "preferences": {},
+            "contexts": [{"name": "host@ctx", "context": {"cluster": "host@ctx", "user": "u"}}],
+            "clusters": [{"name": "host@ctx", "cluster": {"server": "https://10.0.0.1"}}],
+            "users": [],
+            "current-context": "",
+        }
+        with patch("main.load_kubeconfig", return_value=cfg):
+            result = main._ssh_contexts()
+        assert result[0]["port"] is None
+
+    def test_handles_unknown_cluster_ref(self):
+        cfg = {
+            "apiVersion": "v1", "kind": "Config", "preferences": {},
+            "contexts": [{"name": "host@ctx", "context": {"cluster": "missing-cluster", "user": "u"}}],
+            "clusters": [],
+            "users": [],
+            "current-context": "",
+        }
+        with patch("main.load_kubeconfig", return_value=cfg):
+            result = main._ssh_contexts()
+        assert result[0]["server"] == ""
+        assert result[0]["remote_host"] == "localhost"
+
+    def test_multiple_ssh_contexts_returned(self):
+        cfg = {
+            "apiVersion": "v1", "kind": "Config", "preferences": {},
+            "contexts": [
+                {"name": "a@ctx1", "context": {"cluster": "a@ctx1", "user": "u"}},
+                {"name": "b@ctx2", "context": {"cluster": "b@ctx2", "user": "u"}},
+                {"name": "local",  "context": {"cluster": "local",  "user": "u"}},
+            ],
+            "clusters": [
+                {"name": "a@ctx1", "cluster": {"server": "https://10.0.0.1:6443"}},
+                {"name": "b@ctx2", "cluster": {"server": "https://10.0.0.2:6443"}},
+                {"name": "local",  "cluster": {"server": "https://localhost:6443"}},
+            ],
+            "users": [],
+            "current-context": "",
+        }
+        with patch("main.load_kubeconfig", return_value=cfg):
+            result = main._ssh_contexts()
+        assert len(result) == 2
+        assert {r["ssh_host"] for r in result} == {"a", "b"}
