@@ -243,42 +243,42 @@ class TestExportContextsMenu:
 
 class TestValidateContextsMenu:
     def test_skips_when_kubectl_missing(self):
-        with patch("main.shutil.which", return_value=None):
+        with patch("context.shutil.which", return_value=None):
             main.validate_contexts_menu()
 
     def test_handles_successful_context(self, kubeconfig_file):
         ok = MagicMock(returncode=0, stderr="", stdout="Kubernetes control plane is running")
         with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("main.subprocess.run", return_value=ok):
+             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("context.subprocess.run", return_value=ok):
             main.validate_contexts_menu()
 
     def test_handles_failed_context(self, kubeconfig_file):
         fail = MagicMock(returncode=1, stderr="Unable to connect", stdout="")
         with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("main.subprocess.run", return_value=fail):
+             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("context.subprocess.run", return_value=fail):
             main.validate_contexts_menu()
 
     def test_handles_timeout(self, kubeconfig_file):
         with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("main.subprocess.run", side_effect=subprocess.TimeoutExpired("kubectl", 10)):
+             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("context.subprocess.run", side_effect=subprocess.TimeoutExpired("kubectl", 10)):
             main.validate_contexts_menu()
 
     def test_calls_kubectl_with_context_flag(self, kubeconfig_file):
         ok = MagicMock(returncode=0, stderr="", stdout="")
         with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("main.subprocess.run", return_value=ok) as mock_run:
+             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("context.subprocess.run", return_value=ok) as mock_run:
             main.validate_contexts_menu()
         for call in mock_run.call_args_list:
             assert "--context" in call.args[0]
 
     def test_empty_config_does_not_call_kubectl(self, tmp_path):
         with patch("tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
-             patch("main.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("main.subprocess.run") as mock_run:
+             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("context.subprocess.run") as mock_run:
             main.validate_contexts_menu()
         mock_run.assert_not_called()
 
