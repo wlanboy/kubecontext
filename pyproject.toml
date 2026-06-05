@@ -1,15 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "kubecontext"
 version = "0.1.0"
 description = "Kubeconfig manager with SSH import and context management"
 readme = "README.md"
 requires-python = ">=3.12"
+license = {text = "MIT"}
+classifiers = ["Private :: Do Not Upload"]
 dependencies = [
     "paramiko>=4.0.0",
     "questionary>=2.0",
     "rich>=14.3.3",
     "pyyaml>=6.0",
 ]
+
+[project.scripts]
+kubecontext = "kubecontext.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kubecontext"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
