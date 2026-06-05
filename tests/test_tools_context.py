@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import yaml
 
-import tools_context as ctx
+import kubecontext.tools_context as ctx
 from conftest import REMOTE_SINGLE, REMOTE_MULTI, SAMPLE_KUBECONFIG
 
 
@@ -37,7 +37,7 @@ class TestKubeconfigIO:
         assert ctx.load_kubeconfig(p)["contexts"] == []
 
     def test_load_uses_module_default_when_no_arg(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file):
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file):
             config = ctx.load_kubeconfig()
         assert config["current-context"] == "prod"
 
@@ -60,25 +60,25 @@ class TestKubeconfigIO:
 
     def test_save_uses_module_default_when_no_arg(self, tmp_path):
         p = tmp_path / "config"
-        with patch("tools_context.KUBECONFIG_PATH", p):
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", p):
             ctx.save_kubeconfig(SAMPLE_KUBECONFIG)
         assert ctx.load_kubeconfig(p)["current-context"] == "prod"
 
 
 class TestBackupKubeconfig:
     def test_creates_timestamped_backup(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file):
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file):
             backup = ctx.backup_kubeconfig()
         assert backup is not None
         assert backup.exists()
         assert "config.backup." in backup.name
 
     def test_returns_none_if_no_config(self, tmp_path):
-        with patch("tools_context.KUBECONFIG_PATH", tmp_path / "nonexistent"):
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", tmp_path / "nonexistent"):
             assert ctx.backup_kubeconfig() is None
 
     def test_backup_content_matches_original(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file):
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file):
             backup = ctx.backup_kubeconfig()
         assert backup is not None
         assert yaml.safe_load(backup.read_text()) == yaml.safe_load(kubeconfig_file.read_text())

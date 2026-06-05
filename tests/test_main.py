@@ -4,47 +4,47 @@ from unittest.mock import MagicMock, patch
 
 import yaml
 
-import main
+from kubecontext import main
 from conftest import REMOTE_MULTI, REMOTE_SINGLE, SAMPLE_KUBECONFIG, make_mock_ssh_client
-from tools_context import load_kubeconfig, _empty_config
+from kubecontext.tools_context import load_kubeconfig, _empty_config
 
 
 class TestSetCurrentContextMenu:
     def test_sets_selected_context(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.select") as mock_sel:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.select") as mock_sel:
             mock_sel.return_value.ask.return_value = "dev"
             main.set_current_context_menu()
         assert load_kubeconfig(kubeconfig_file)["current-context"] == "dev"
 
     def test_no_write_when_already_current(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.select") as mock_sel, \
-             patch("tools_context.save_kubeconfig") as mock_save:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.select") as mock_sel, \
+             patch("kubecontext.tools_context.save_kubeconfig") as mock_save:
             mock_sel.return_value.ask.return_value = "prod"  # already active
             main.set_current_context_menu()
         mock_save.assert_not_called()
 
     def test_no_write_when_cancelled(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.select") as mock_sel, \
-             patch("tools_context.save_kubeconfig") as mock_save:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.select") as mock_sel, \
+             patch("kubecontext.tools_context.save_kubeconfig") as mock_save:
             mock_sel.return_value.ask.return_value = None
             main.set_current_context_menu()
         mock_save.assert_not_called()
 
     def test_empty_config_does_not_prompt(self, tmp_path):
-        with patch("tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
-             patch("main.questionary.select") as mock_sel:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
+             patch("kubecontext.main.questionary.select") as mock_sel:
             main.set_current_context_menu()
         mock_sel.assert_not_called()
 
 
 class TestDeleteContextMenu:
     def test_deletes_context_and_orphans(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.select")  as mock_sel, \
-             patch("main.questionary.confirm") as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.select")  as mock_sel, \
+             patch("kubecontext.main.questionary.confirm") as mock_conf:
             mock_sel.return_value.ask.return_value  = "dev"
             mock_conf.return_value.ask.return_value = True
             main.delete_context_menu()
@@ -68,9 +68,9 @@ class TestDeleteContextMenu:
         p = tmp_path / "config"
         p.write_text(yaml.dump(cfg))
 
-        with patch("tools_context.KUBECONFIG_PATH", p), \
-             patch("main.questionary.select")  as mock_sel, \
-             patch("main.questionary.confirm") as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", p), \
+             patch("kubecontext.main.questionary.select")  as mock_sel, \
+             patch("kubecontext.main.questionary.confirm") as mock_conf:
             mock_sel.return_value.ask.return_value  = "ctx-a"
             mock_conf.return_value.ask.return_value = True
             main.delete_context_menu()
@@ -79,9 +79,9 @@ class TestDeleteContextMenu:
         assert "shared" in [c["name"] for c in saved["clusters"]]
 
     def test_resets_current_context_when_deleted(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.select")  as mock_sel, \
-             patch("main.questionary.confirm") as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.select")  as mock_sel, \
+             patch("kubecontext.main.questionary.confirm") as mock_conf:
             mock_sel.return_value.ask.return_value  = "prod"
             mock_conf.return_value.ask.return_value = True
             main.delete_context_menu()
@@ -91,18 +91,18 @@ class TestDeleteContextMenu:
         assert saved["current-context"] in [c["name"] for c in saved["contexts"]]
 
     def test_aborted_does_not_write(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.select")  as mock_sel, \
-             patch("main.questionary.confirm") as mock_conf, \
-             patch("tools_context.save_kubeconfig") as mock_save:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.select")  as mock_sel, \
+             patch("kubecontext.main.questionary.confirm") as mock_conf, \
+             patch("kubecontext.tools_context.save_kubeconfig") as mock_save:
             mock_sel.return_value.ask.return_value  = "dev"
             mock_conf.return_value.ask.return_value = False
             main.delete_context_menu()
         mock_save.assert_not_called()
 
     def test_empty_config_does_not_prompt(self, tmp_path):
-        with patch("tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
-             patch("main.questionary.select") as mock_sel:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
+             patch("kubecontext.main.questionary.select") as mock_sel:
             main.delete_context_menu()
         mock_sel.assert_not_called()
 
@@ -117,9 +117,9 @@ class TestDeleteContextMenu:
         p = tmp_path / "config"
         p.write_text(yaml.dump(cfg))
 
-        with patch("tools_context.KUBECONFIG_PATH", p), \
-             patch("main.questionary.select")  as mock_sel, \
-             patch("main.questionary.confirm") as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", p), \
+             patch("kubecontext.main.questionary.select")  as mock_sel, \
+             patch("kubecontext.main.questionary.confirm") as mock_conf:
             mock_sel.return_value.ask.return_value  = "only"
             mock_conf.return_value.ask.return_value = True
             main.delete_context_menu()
@@ -132,9 +132,9 @@ class TestDeleteContextMenu:
 class TestExportContextsMenu:
     def test_exports_single_context_to_file(self, kubeconfig_file, tmp_path):
         out = tmp_path / "exported.yaml"
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.checkbox") as mock_chk, \
-             patch("main.questionary.text")     as mock_txt:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk, \
+             patch("kubecontext.main.questionary.text")     as mock_txt:
             mock_chk.return_value.ask.return_value = ["dev"]
             mock_txt.return_value.ask.return_value = str(out)
             main.export_contexts_menu()
@@ -145,9 +145,9 @@ class TestExportContextsMenu:
 
     def test_export_includes_only_selected_cluster_and_user(self, kubeconfig_file, tmp_path):
         out = tmp_path / "exported.yaml"
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.checkbox") as mock_chk, \
-             patch("main.questionary.text")     as mock_txt:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk, \
+             patch("kubecontext.main.questionary.text")     as mock_txt:
             mock_chk.return_value.ask.return_value = ["prod"]
             mock_txt.return_value.ask.return_value = str(out)
             main.export_contexts_menu()
@@ -158,9 +158,9 @@ class TestExportContextsMenu:
 
     def test_export_sets_permissions_600(self, kubeconfig_file, tmp_path):
         out = tmp_path / "exported.yaml"
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.checkbox") as mock_chk, \
-             patch("main.questionary.text")     as mock_txt:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk, \
+             patch("kubecontext.main.questionary.text")     as mock_txt:
             mock_chk.return_value.ask.return_value = ["dev"]
             mock_txt.return_value.ask.return_value = str(out)
             main.export_contexts_menu()
@@ -168,9 +168,9 @@ class TestExportContextsMenu:
         assert oct(out.stat().st_mode)[-3:] == "600"
 
     def test_export_prints_to_stdout_when_no_path(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.checkbox") as mock_chk, \
-             patch("main.questionary.text")     as mock_txt:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk, \
+             patch("kubecontext.main.questionary.text")     as mock_txt:
             mock_chk.return_value.ask.return_value = ["dev"]
             mock_txt.return_value.ask.return_value = ""  # empty → stdout
             main.export_contexts_menu()  # must not raise
@@ -178,10 +178,10 @@ class TestExportContextsMenu:
     def test_export_overwrites_existing_file_on_confirm(self, kubeconfig_file, tmp_path):
         out = tmp_path / "exported.yaml"
         out.write_text("old content")
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.checkbox") as mock_chk, \
-             patch("main.questionary.text")     as mock_txt, \
-             patch("main.questionary.confirm")  as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk, \
+             patch("kubecontext.main.questionary.text")     as mock_txt, \
+             patch("kubecontext.main.questionary.confirm")  as mock_conf:
             mock_chk.return_value.ask.return_value  = ["dev"]
             mock_txt.return_value.ask.return_value  = str(out)
             mock_conf.return_value.ask.return_value = True
@@ -193,10 +193,10 @@ class TestExportContextsMenu:
     def test_export_aborts_when_overwrite_declined(self, kubeconfig_file, tmp_path):
         out = tmp_path / "exported.yaml"
         out.write_text("old content")
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.checkbox") as mock_chk, \
-             patch("main.questionary.text")     as mock_txt, \
-             patch("main.questionary.confirm")  as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk, \
+             patch("kubecontext.main.questionary.text")     as mock_txt, \
+             patch("kubecontext.main.questionary.confirm")  as mock_conf:
             mock_chk.return_value.ask.return_value  = ["dev"]
             mock_txt.return_value.ask.return_value  = str(out)
             mock_conf.return_value.ask.return_value = False
@@ -206,16 +206,16 @@ class TestExportContextsMenu:
 
     def test_export_cancelled_checkbox_does_not_write(self, kubeconfig_file, tmp_path):
         out = tmp_path / "exported.yaml"
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("main.questionary.checkbox") as mock_chk:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk:
             mock_chk.return_value.ask.return_value = None
             main.export_contexts_menu()
 
         assert not out.exists()
 
     def test_empty_config_does_not_prompt(self, tmp_path):
-        with patch("tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
-             patch("main.questionary.checkbox") as mock_chk:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk:
             main.export_contexts_menu()
         mock_chk.assert_not_called()
 
@@ -231,9 +231,9 @@ class TestExportContextsMenu:
         p.write_text(yaml.dump(cfg))
         out = tmp_path / "exported.yaml"
 
-        with patch("tools_context.KUBECONFIG_PATH", p), \
-             patch("main.questionary.checkbox") as mock_chk, \
-             patch("main.questionary.text")     as mock_txt:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", p), \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk, \
+             patch("kubecontext.main.questionary.text")     as mock_txt:
             mock_txt.return_value.ask.return_value = str(out)
             main.export_contexts_menu()
 
@@ -243,42 +243,42 @@ class TestExportContextsMenu:
 
 class TestValidateContextsMenu:
     def test_skips_when_kubectl_missing(self):
-        with patch("context.shutil.which", return_value=None):
+        with patch("kubecontext.context.shutil.which", return_value=None):
             main.validate_contexts_menu()
 
     def test_handles_successful_context(self, kubeconfig_file):
         ok = MagicMock(returncode=0, stderr="", stdout="Kubernetes control plane is running")
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("context.subprocess.run", return_value=ok):
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("kubecontext.context.subprocess.run", return_value=ok):
             main.validate_contexts_menu()
 
     def test_handles_failed_context(self, kubeconfig_file):
         fail = MagicMock(returncode=1, stderr="Unable to connect", stdout="")
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("context.subprocess.run", return_value=fail):
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("kubecontext.context.subprocess.run", return_value=fail):
             main.validate_contexts_menu()
 
     def test_handles_timeout(self, kubeconfig_file):
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("context.subprocess.run", side_effect=subprocess.TimeoutExpired("kubectl", 10)):
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("kubecontext.context.subprocess.run", side_effect=subprocess.TimeoutExpired("kubectl", 10)):
             main.validate_contexts_menu()
 
     def test_calls_kubectl_with_context_flag(self, kubeconfig_file):
         ok = MagicMock(returncode=0, stderr="", stdout="")
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig_file), \
-             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("context.subprocess.run", return_value=ok) as mock_run:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig_file), \
+             patch("kubecontext.context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("kubecontext.context.subprocess.run", return_value=ok) as mock_run:
             main.validate_contexts_menu()
         for call in mock_run.call_args_list:
             assert "--context" in call.args[0]
 
     def test_empty_config_does_not_call_kubectl(self, tmp_path):
-        with patch("tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
-             patch("context.shutil.which", return_value="/usr/bin/kubectl"), \
-             patch("context.subprocess.run") as mock_run:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", tmp_path / "none"), \
+             patch("kubecontext.context.shutil.which", return_value="/usr/bin/kubectl"), \
+             patch("kubecontext.context.subprocess.run") as mock_run:
             main.validate_contexts_menu()
         mock_run.assert_not_called()
 
@@ -289,11 +289,11 @@ class TestSshImportMenu:
         kubeconfig.write_text(yaml.dump(SAMPLE_KUBECONFIG))
         client = make_mock_ssh_client(yaml.dump(REMOTE_SINGLE).encode())
 
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig), \
-             patch("tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
-             patch("tools_ssh.paramiko.SSHClient",  return_value=client), \
-             patch("main.questionary.select")  as mock_sel, \
-             patch("main.questionary.confirm") as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig), \
+             patch("kubecontext.tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
+             patch("kubecontext.tools_ssh.paramiko.SSHClient",  return_value=client), \
+             patch("kubecontext.main.questionary.select")  as mock_sel, \
+             patch("kubecontext.main.questionary.confirm") as mock_conf:
             mock_sel.return_value.ask.return_value  = "bastion"
             mock_conf.return_value.ask.return_value = True
             main.ssh_import_menu()
@@ -308,11 +308,11 @@ class TestSshImportMenu:
         kubeconfig.write_text(yaml.dump(SAMPLE_KUBECONFIG))
         client = make_mock_ssh_client(yaml.dump(REMOTE_SINGLE).encode())
 
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig), \
-             patch("tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
-             patch("tools_ssh.paramiko.SSHClient",  return_value=client), \
-             patch("main.questionary.select")  as mock_sel, \
-             patch("main.questionary.confirm") as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig), \
+             patch("kubecontext.tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
+             patch("kubecontext.tools_ssh.paramiko.SSHClient",  return_value=client), \
+             patch("kubecontext.main.questionary.select")  as mock_sel, \
+             patch("kubecontext.main.questionary.confirm") as mock_conf:
             mock_sel.return_value.ask.return_value  = "bastion"
             mock_conf.return_value.ask.return_value = False
             main.ssh_import_menu()
@@ -323,8 +323,8 @@ class TestSshImportMenu:
     def test_no_hosts_does_not_prompt(self, tmp_path):
         empty = tmp_path / "ssh_config"
         empty.write_text("")
-        with patch("tools_ssh.SSH_CONFIG_PATH", empty), \
-             patch("main.questionary.select") as mock_sel:
+        with patch("kubecontext.tools_ssh.SSH_CONFIG_PATH", empty), \
+             patch("kubecontext.main.questionary.select") as mock_sel:
             main.ssh_import_menu()
         mock_sel.assert_not_called()
 
@@ -334,10 +334,10 @@ class TestSshImportMenu:
         client = MagicMock()
         client.connect.side_effect = OSError("refused")
 
-        with patch("tools_ssh.SSH_CONFIG_PATH",    ssh_config_file), \
-             patch("tools_ssh.paramiko.SSHClient", return_value=client), \
-             patch("main.questionary.select") as mock_sel, \
-             patch("tools_context.save_kubeconfig") as mock_save:
+        with patch("kubecontext.tools_ssh.SSH_CONFIG_PATH",    ssh_config_file), \
+             patch("kubecontext.tools_ssh.paramiko.SSHClient", return_value=client), \
+             patch("kubecontext.main.questionary.select") as mock_sel, \
+             patch("kubecontext.tools_context.save_kubeconfig") as mock_save:
             mock_sel.return_value.ask.return_value = "bastion"
             main.ssh_import_menu()
         mock_save.assert_not_called()
@@ -347,12 +347,12 @@ class TestSshImportMenu:
         kubeconfig.write_text(yaml.dump(SAMPLE_KUBECONFIG))
         client = make_mock_ssh_client(yaml.dump(REMOTE_SINGLE).encode())
 
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig), \
-             patch("tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
-             patch("tools_ssh.paramiko.SSHClient",  return_value=client), \
-             patch("main.questionary.select")   as mock_sel, \
-             patch("main.questionary.confirm")  as mock_conf, \
-             patch("tools_context.backup_kubeconfig") as mock_backup:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig), \
+             patch("kubecontext.tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
+             patch("kubecontext.tools_ssh.paramiko.SSHClient",  return_value=client), \
+             patch("kubecontext.main.questionary.select")   as mock_sel, \
+             patch("kubecontext.main.questionary.confirm")  as mock_conf, \
+             patch("kubecontext.tools_context.backup_kubeconfig") as mock_backup:
             mock_sel.return_value.ask.return_value  = "bastion"
             mock_conf.return_value.ask.return_value = True
             main.ssh_import_menu()
@@ -371,11 +371,11 @@ class TestSshImportMenu:
         kubeconfig.write_text(yaml.dump(existing))
         client = make_mock_ssh_client(yaml.dump(REMOTE_SINGLE).encode())
 
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig), \
-             patch("tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
-             patch("tools_ssh.paramiko.SSHClient",  return_value=client), \
-             patch("main.questionary.select")  as mock_sel, \
-             patch("main.questionary.confirm") as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig), \
+             patch("kubecontext.tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
+             patch("kubecontext.tools_ssh.paramiko.SSHClient",  return_value=client), \
+             patch("kubecontext.main.questionary.select")  as mock_sel, \
+             patch("kubecontext.main.questionary.confirm") as mock_conf:
             mock_sel.return_value.ask.return_value  = "bastion"
             mock_conf.return_value.ask.return_value = True
             main.ssh_import_menu()
@@ -390,12 +390,12 @@ class TestSshImportMenu:
         kubeconfig.write_text(yaml.dump(SAMPLE_KUBECONFIG))
         client = make_mock_ssh_client(yaml.dump(REMOTE_MULTI).encode())
 
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig), \
-             patch("tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
-             patch("tools_ssh.paramiko.SSHClient",  return_value=client), \
-             patch("main.questionary.select")    as mock_sel, \
-             patch("main.questionary.checkbox")  as mock_chk, \
-             patch("main.questionary.confirm")   as mock_conf:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig), \
+             patch("kubecontext.tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
+             patch("kubecontext.tools_ssh.paramiko.SSHClient",  return_value=client), \
+             patch("kubecontext.main.questionary.select")    as mock_sel, \
+             patch("kubecontext.main.questionary.checkbox")  as mock_chk, \
+             patch("kubecontext.main.questionary.confirm")   as mock_conf:
             mock_sel.return_value.ask.return_value  = "bastion"
             mock_chk.return_value.ask.return_value  = ["bastion@alpha"]
             mock_conf.return_value.ask.return_value = True
@@ -411,12 +411,12 @@ class TestSshImportMenu:
         kubeconfig.write_text(yaml.dump(SAMPLE_KUBECONFIG))
         client = make_mock_ssh_client(yaml.dump(REMOTE_MULTI).encode())
 
-        with patch("tools_context.KUBECONFIG_PATH", kubeconfig), \
-             patch("tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
-             patch("tools_ssh.paramiko.SSHClient",  return_value=client), \
-             patch("main.questionary.select")   as mock_sel, \
-             patch("main.questionary.checkbox") as mock_chk, \
-             patch("tools_context.save_kubeconfig") as mock_save:
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", kubeconfig), \
+             patch("kubecontext.tools_ssh.SSH_CONFIG_PATH",     ssh_config_file), \
+             patch("kubecontext.tools_ssh.paramiko.SSHClient",  return_value=client), \
+             patch("kubecontext.main.questionary.select")   as mock_sel, \
+             patch("kubecontext.main.questionary.checkbox") as mock_chk, \
+             patch("kubecontext.tools_context.save_kubeconfig") as mock_save:
             mock_sel.return_value.ask.return_value = "bastion"
             mock_chk.return_value.ask.return_value = None  # Ctrl+C / cancelled
             main.ssh_import_menu()
@@ -439,9 +439,9 @@ class TestSshContexts:
             contexts=[{"name": "bastion@default", "context": {"cluster": "bastion@default", "user": "u"}}],
             clusters=[{"name": "bastion@default", "cluster": {"server": "https://192.168.1.1:6443"}}],
         )
-        with patch("tools_context.KUBECONFIG_PATH", tmp_path / "c"):
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", tmp_path / "c"):
             (tmp_path / "c").write_text(yaml.dump(cfg))
-            with patch("main.load_kubeconfig", return_value=cfg):
+            with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
                 result = main._ssh_contexts()
         assert len(result) == 1
         assert result[0]["context"] == "bastion@default"
@@ -454,7 +454,7 @@ class TestSshContexts:
             contexts=[{"name": "local", "context": {"cluster": "local", "user": "u"}}],
             clusters=[{"name": "local", "cluster": {"server": "https://localhost:6443"}}],
         )
-        with patch("main.load_kubeconfig", return_value=cfg):
+        with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
             result = main._ssh_contexts()
         assert result == []
 
@@ -466,7 +466,7 @@ class TestSshContexts:
             "users": [],
             "current-context": "",
         }
-        with patch("main.load_kubeconfig", return_value=cfg):
+        with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
             result = main._ssh_contexts()
         assert result[0]["port"] is None
 
@@ -478,7 +478,7 @@ class TestSshContexts:
             "users": [],
             "current-context": "",
         }
-        with patch("main.load_kubeconfig", return_value=cfg):
+        with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
             result = main._ssh_contexts()
         assert result[0]["server"] == ""
         assert result[0]["remote_host"] == "localhost"
@@ -499,7 +499,7 @@ class TestSshContexts:
             "users": [],
             "current-context": "",
         }
-        with patch("main.load_kubeconfig", return_value=cfg):
+        with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
             result = main._ssh_contexts()
         assert len(result) == 2
         assert {r["ssh_host"] for r in result} == {"a", "b"}
