@@ -41,15 +41,60 @@ Tests ausführen:
 uv run pytest
 ```
 
-## Starten
+## Starten (Entwicklung)
 
 ```sh
-uv run main.py
+uv run -m kubecontext.main
 ```
 
-`uv run` stellt sicher, dass die virtuelle Umgebung aktuell ist und alle Dependencies aus `uv.lock` installiert sind, bevor das Skript gestartet wird. Alternativ kann nach `uv sync` auch direkt `python main.py` verwendet werden.
+`uv run` stellt sicher, dass die virtuelle Umgebung aktuell ist und alle Dependencies aus `uv.lock` installiert sind, bevor das Skript gestartet wird.
 
 Nach dem Start wird eine Tabelle aller vorhandenen Kontexte angezeigt, gefolgt vom Hauptmenü.
+
+## Paket bauen und installieren
+
+### Wheel bauen
+
+```sh
+uv build
+# Ergebnis:
+#   dist/kubecontext-0.1.0-py3-none-any.whl
+#   dist/kubecontext-0.1.0.tar.gz
+```
+
+### Wheel testen ohne Installation
+
+```sh
+uv run --with dist/kubecontext-0.1.0-py3-none-any.whl kubecontext
+uv run --with dist/kubecontext-0.1.0-py3-none-any.whl kubecontext --help
+```
+
+Nach einem neuen Build den Cache leeren, damit uv die neue Version lädt:
+
+```sh
+uv cache clean kubecontext
+```
+
+### Systemweit installieren
+
+```sh
+uv tool install dist/kubecontext-0.1.0-py3-none-any.whl
+
+# Danach direkt aufrufbar:
+kubecontext
+
+# Deinstallieren:
+uv tool uninstall kubecontext
+
+# Neu installieren (Update):
+uv tool install --force dist/kubecontext-0.1.0-py3-none-any.whl
+```
+
+### Als Abhängigkeit in einem anderen Projekt nutzen
+
+```sh
+uv add dist/kubecontext-0.1.0-py3-none-any.whl
+```
 
 ---
 
