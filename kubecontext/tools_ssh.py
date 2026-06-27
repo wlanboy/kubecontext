@@ -141,9 +141,9 @@ def parse_ssh_config() -> list[str]:
     for line in SSH_CONFIG_PATH.read_text().splitlines():
         stripped = line.strip()
         if stripped.lower().startswith("host "):
-            name = stripped[5:].strip()
-            if "*" not in name and "?" not in name:
-                hosts.append(name)
+            for name in stripped[5:].split():
+                if "*" not in name and "?" not in name:
+                    hosts.append(name)
     return hosts
 
 
