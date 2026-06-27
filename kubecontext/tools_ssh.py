@@ -172,12 +172,12 @@ def download_remote_kubeconfig(hostname: str) -> dict | None:
         client = paramiko.SSHClient()
         client.load_system_host_keys()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(**connect_kwargs)
 
-        with client.open_sftp() as sftp:
-            with sftp.open(".kube/config") as f:
-                content = f.read()
-        client.close()
+        with client:
+            client.connect(**connect_kwargs)
+            with client.open_sftp() as sftp:
+                with sftp.open(".kube/config") as f:
+                    content = f.read()
 
         return yaml.safe_load(content)
 
