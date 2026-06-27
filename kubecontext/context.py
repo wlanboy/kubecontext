@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import questionary
@@ -11,7 +12,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from . import tools_context
-from .tools_context import filter_contexts, get_list, load_kubeconfig, save_kubeconfig
+from .tools_context import filter_contexts, get_list, load_kubeconfig, merge_configs, save_kubeconfig
 
 console = Console()
 
@@ -183,6 +184,73 @@ def export_contexts_menu() -> None:
     out_path.write_text(export_yaml)
     out_path.chmod(0o600)
     console.print(f"[green]✓ Exported {len(selected_names)} context(s) to {out_path}[/green]")
+
+
+# ── Import from File ─────────────────────────────────────────────────────────
+
+def import_file_menu() -> None:
+    path_str = questionary.text("Path to kubeconfig file:").ask()
+    if not path_str:
+        return
+
+    path = Path(path_str.strip()).expanduser()
+    if not path.exists():
+        console.print(f"[red]✗ File not found: {path}[/red]")
+        return
+
+    try:
+        remote = load_kubeconfig(path)
+    except Exception as exc:
+        console.print(f"[red]✗ Failed to load {path}: {exc}[/red]")
+        return
+
+    all_names = [c["name"] for c in get_list(remote, "contexts")]
+    if not all_names:
+        console.print("[yellow]No contexts found in file.[/yellow]")
+        return
+
+    if len(all_names) > 1:
+        selected_names = questionary.checkbox(
+            "Select contexts to import:",
+            choices=all_names,
+            validate=lambda v: True if v else "Select at least one context",
+        ).ask()
+        if not selected_names:
+            return
+        remote = filter_contexts(remote, selected_names)
+
+    new_names = [c["name"] for c in get_list(remote, "contexts")]
+
+    console.print("\n[bold]Contexts to import:[/bold]")
+    for n in new_names:
+        console.print(f"  [cyan]+[/cyan] {n}")
+
+    base = load_kubeconfig()
+    existing = {c["name"] for c in get_list(base, "contexts")}
+    overwrites = [n for n in new_names if n in existing]
+    if overwrites:
+        console.print(f"\n[yellow]Will overwrite existing:[/yellow] {', '.join(overwrites)}")
+
+    merged = merge_configs(base, remote)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yaml", delete=False, prefix="kubeconfig_preview_"
+    ) as tmp:
+        yaml.dump(merged, tmp, default_flow_style=False, allow_unicode=True)
+        tmp_path = Path(tmp.name)
+
+    console.print("\n[bold]Preview — merged config:[/bold]")
+    console.print(Syntax(tmp_path.read_text(), "yaml", theme="monokai", line_numbers=True))
+
+    if questionary.confirm(f"Write to {tools_context.KUBECONFIG_PATH}?", default=False).ask():
+        tools_context.backup_kubeconfig()
+        shutil.copy2(tmp_path, tools_context.KUBECONFIG_PATH)
+        tools_context.KUBECONFIG_PATH.chmod(0o600)
+        console.print(f"[green]✓ Config updated. Contexts: {', '.join(new_names)}[/green]")
+    else:
+        console.print("[dim]Aborted — no changes.[/dim]")
+
+    tmp_path.unlink(missing_ok=True)
 
 
 # ── Validate Contexts ─────────────────────────────────────────────────────────

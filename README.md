@@ -8,6 +8,7 @@ kubecontext vereinfacht das Handling mehrerer Cluster, indem es das manuelle Edi
 
 * Interaktiver Kontext-Wechsel: Schnelles Umschalten des aktiven Kubernetes-Kontexts über ein übersichtliches Auswahlmenü im Terminal.
 * Remote-Kubeconfig-Import: Sicherer Import von Kubeconfigs direkt von Remote-Servern via SSH.
+* Lokaler Datei-Import: Kubeconfig-Dateien von Cloud-Anbietern (AWS EKS, GKE, Azure …) oder lokalen Pfaden in die eigene Config mergen.
 * Integriertes SSH-Tunnel-Management: Automatisches Erstellen und Verwalten von SSH-Tunneln für Cluster, die nicht direkt öffentlich erreichbar sind.
 * Live-Validierung: Direktes Überprüfen der Cluster-Erreichbarkeit aller konfigurierten Kontexte über einen eigenen Menüpunkt.
 * Kontext-Export: Ausgewählte Kontexte als eigenständige Kubeconfig in eine Datei oder auf stdout ausgeben.
@@ -119,6 +120,19 @@ Lädt die `~/.kube/config` eines Remote-Servers per SSH herunter und merged sie 
 - Kontexte, Cluster und User werden auf den SSH-Hostnamen umbenannt. Der ursprüngliche Name wird mit `@` getrennt angehängt (`hostname@originalname`).
 - Vor dem Schreiben wird eine Vorschau der zusammengeführten Config angezeigt.
 - Bestehende Einträge mit gleichem Namen werden überschrieben.
+- Es wird automatisch ein Backup angelegt (`~/.kube/config.backup.<timestamp>`).
+
+---
+
+### Datei-Import
+
+Merged eine lokale Kubeconfig-Datei in die eigene `~/.kube/config`.
+
+- Typischer Anwendungsfall: Kubeconfig-Dateien von Cloud-Anbietern (AWS EKS, GKE, Azure AKS) oder aus einem `KUBECONFIG`-Export.
+- Dateipfad wird manuell eingegeben; `~`-Expansion wird unterstützt.
+- Bei mehreren Kontexten in der Datei: Checkbox-Auswahl der zu importierenden Kontexte.
+- Bestehende Einträge mit gleichem Namen werden überschrieben.
+- Vor dem Schreiben wird eine Vorschau der zusammengeführten Config angezeigt.
 - Es wird automatisch ein Backup angelegt (`~/.kube/config.backup.<timestamp>`).
 
 ---

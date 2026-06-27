@@ -18,6 +18,7 @@ from . import tools_context
 from .context import (
     delete_context_menu,
     export_contexts_menu,
+    import_file_menu,
     set_current_context_menu,
     show_contexts_table,
     validate_contexts_menu,
@@ -220,6 +221,7 @@ def main() -> None:
 
     menu = [
         questionary.Choice("  SSH Import   download & merge remote kubeconfig", value="import"),
+        questionary.Choice("  File Import  load & merge local kubeconfig file", value="file_import"),
         questionary.Choice("  Tunnels      manage SSH port forwarding",          value="tunnels"),
         questionary.Choice("  Set context  switch active context",               value="set"),
         questionary.Choice("  Export       write context(s) to a file",          value="export"),
@@ -243,6 +245,8 @@ def main() -> None:
         match action:
             case "import":
                 ssh_import_menu()
+            case "file_import":
+                import_file_menu()
             case "tunnels":
                 ssh_tunnel_menu()
             case "set":
