@@ -9,8 +9,9 @@ kubecontext vereinfacht das Handling mehrerer Cluster, indem es das manuelle Edi
 * Interaktiver Kontext-Wechsel: Schnelles Umschalten des aktiven Kubernetes-Kontexts über ein übersichtliches Auswahlmenü im Terminal.
 * Remote-Kubeconfig-Import: Sicherer Import von Kubeconfigs direkt von Remote-Servern via SSH.
 * Integriertes SSH-Tunnel-Management: Automatisches Erstellen und Verwalten von SSH-Tunneln für Cluster, die nicht direkt öffentlich erreichbar sind.
-* Live-Validierung: Direktes Überprüfen der Cluster-Erreichbarkeit vor oder nach dem Wechsel des Kontexts.
-* Sicheres Bereinigen: Altheidige oder ungenutzte Kontexte direkt und sauber aus der Konfiguration löschen.
+* Live-Validierung: Direktes Überprüfen der Cluster-Erreichbarkeit aller konfigurierten Kontexte über einen eigenen Menüpunkt.
+* Kontext-Export: Ausgewählte Kontexte als eigenständige Kubeconfig in eine Datei oder auf stdout ausgeben.
+* Sicheres Bereinigen: Alte oder ungenutzte Kontexte direkt und sauber aus der Konfiguration löschen.
 
 ## Voraussetzungen
 
@@ -59,7 +60,7 @@ uv run -m kubecontext.main
 
 `uv run` stellt sicher, dass die virtuelle Umgebung aktuell ist und alle Dependencies aus `uv.lock` installiert sind, bevor das Skript gestartet wird.
 
-Nach dem Start wird eine Tabelle aller vorhandenen Kontexte angezeigt, gefolgt vom Hauptmenü.
+Vor jedem Menüaufruf wird eine Tabelle aller vorhandenen Kontexte angezeigt, gefolgt vom Hauptmenü.
 
 ## Paket bauen und installieren
 
@@ -151,6 +152,17 @@ Löscht einen Kontext aus der Kubeconfig.
 - Wird der zugehörige Cluster oder User von keinem anderen Kontext mehr referenziert, werden diese ebenfalls entfernt (Orphan-Bereinigung).
 - Ist der gelöschte Kontext der aktive, wird automatisch der erste verbleibende Kontext aktiviert.
 - Vor dem Löschen wird ein Backup erstellt.
+
+---
+
+### Export
+
+Exportiert einen oder mehrere Kontexte als eigenständige Kubeconfig.
+
+- Zeigt alle vorhandenen Kontexte zur Mehrfachauswahl (Checkbox).
+- Die exportierte Config enthält nur die gewählten Kontexte sowie zugehörige Cluster und User.
+- Ausgabe wahlweise auf stdout (YAML-Vorschau) oder in eine Datei (mit Berechtigungen `0600`).
+- Bereits vorhandene Zieldatei wird nur nach Bestätigung überschrieben.
 
 ---
 
