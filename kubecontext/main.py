@@ -190,6 +190,7 @@ def ssh_tunnel_menu() -> None:
 
         elif action == "close":
             opts = [questionary.Choice(t.label, value=t) for t in closeable]
+            opts += [questionary.Separator(), questionary.Choice("  Back", value=None)]
             selected = questionary.select("Close tunnel:", choices=opts).ask()
             if selected:
                 close_tunnel(selected)
