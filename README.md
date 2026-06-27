@@ -1,6 +1,16 @@
 # kubecontext
 
-Interaktives TUI-Tool zur Verwaltung von Kubernetes-Kontexten in `~/.kube/config`. Es ermöglicht das Importieren von Kubeconfigs von Remote-Servern per SSH, das Verwalten von SSH-Tunneln, das Wechseln des aktiven Kontexts, das Löschen von Kontexten sowie die Validierung der Cluster-Erreichbarkeit – alles über ein einfaches Auswahlmenü im Terminal.
+Ein interaktives TUI-Tool (Terminal User Interface) zur effizienten und sicheren Verwaltung von Kubernetes-Kontexten in der lokalen ~/.kube/config.
+
+kubecontext vereinfacht das Handling mehrerer Cluster, indem es das manuelle Editieren von Kubeconfigs überflüssig macht. Es kombiniert nahtlosen Remote-Import per SSH, integriertes Tunnel-Management und schnelle Kontext-Wechsel in einer intuitiven Terminal-Oberfläche.
+
+## Hauptfunktionen (Features)
+
+* Interaktiver Kontext-Wechsel: Schnelles Umschalten des aktiven Kubernetes-Kontexts über ein übersichtliches Auswahlmenü im Terminal.
+* Remote-Kubeconfig-Import: Sicherer Import von Kubeconfigs direkt von Remote-Servern via SSH.
+* Integriertes SSH-Tunnel-Management: Automatisches Erstellen und Verwalten von SSH-Tunneln für Cluster, die nicht direkt öffentlich erreichbar sind.
+* Live-Validierung: Direktes Überprüfen der Cluster-Erreichbarkeit vor oder nach dem Wechsel des Kontexts.
+* Sicheres Bereinigen: Altheidige oder ungenutzte Kontexte direkt und sauber aus der Konfiguration löschen.
 
 ## Voraussetzungen
 
