@@ -4,6 +4,7 @@ import json
 import os
 import signal
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -15,6 +16,11 @@ console = Console()
 
 SSH_CONFIG_PATH  = Path.home() / ".ssh" / "config"
 TUNNEL_STATE_PATH = Path.home() / ".kube" / "kubecontext_tunnels.json"
+
+# How long to wait for ssh to fail fast (auth error, port in use, unreachable
+# host) before we trust the tunnel is actually up.
+_TUNNEL_STARTUP_CHECK_SECONDS = 0.6
+_TUNNEL_STARTUP_CHECK_INTERVAL = 0.1
 
 
 # ── SSH Tunnel Management ─────────────────────────────────────────────────────
@@ -85,7 +91,9 @@ def load_tunnels() -> None:
 def open_tunnel(host: str, local_port: int, remote_host: str, remote_port: int) -> SshTunnel | None:
     """Start an SSH local-port-forward tunnel in the background."""
     cmd = [
-        "ssh", "-N", "-o", "ExitOnForwardFailure=yes",
+        "ssh", "-N",
+        "-o", "ExitOnForwardFailure=yes",
+        "-o", "BatchMode=yes",  # never block on an interactive password prompt
         "-L", f"{local_port}:{remote_host}:{remote_port}",
         host,
     ]
@@ -97,6 +105,20 @@ def open_tunnel(host: str, local_port: int, remote_host: str, remote_port: int) 
         )
     except FileNotFoundError:
         console.print("[red]✗ ssh binary not found in PATH[/red]")
+        return None
+
+    # ssh -N with ExitOnForwardFailure exits quickly on auth errors, a busy
+    # local port, or an unreachable host — give it a moment to fail before
+    # reporting success.
+    elapsed = 0.0
+    while elapsed < _TUNNEL_STARTUP_CHECK_SECONDS and proc.poll() is None:
+        time.sleep(_TUNNEL_STARTUP_CHECK_INTERVAL)
+        elapsed += _TUNNEL_STARTUP_CHECK_INTERVAL
+
+    if proc.poll() is not None:
+        stderr = proc.stderr.read().decode(errors="replace").strip() if proc.stderr else ""
+        msg = stderr.splitlines()[-1] if stderr else f"ssh exited with code {proc.returncode}"
+        console.print(f"[red]✗ Tunnel failed: {msg}[/red]")
         return None
 
     tunnel = SshTunnel(host, local_port, remote_host, remote_port, pid=proc.pid, _process=proc)
