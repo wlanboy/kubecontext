@@ -139,7 +139,14 @@ def ssh_tunnel_menu() -> None:
             return
 
         active_tunnels = get_tunnels()
-        tunneled_ports = {t.local_port for t in active_tunnels}
+        tunnels_by_port = {t.local_port: t for t in active_tunnels}
+
+        def _matching_tunnel(c: dict):
+            """Tunnel that actually forwards for this context (same SSH host + target)."""
+            t = tunnels_by_port.get(c["port"])
+            if t and t.host == c["ssh_host"] and t.remote_host == c["remote_host"]:
+                return t
+            return None
 
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2, 0, 0))
         table.add_column("",        width=2)
@@ -149,18 +156,20 @@ def ssh_tunnel_menu() -> None:
         table.add_column("Tunnel")
 
         for c in ssh_ctxs:
-            if c["port"] and c["port"] in tunneled_ports:
-                status = "[green]● open[/green]"
-            elif c["port"]:
-                status = "[dim]○ closed[/dim]"
-            else:
+            if not c["port"]:
                 status = "[yellow]? no port[/yellow]"
+            elif _matching_tunnel(c):
+                status = "[green]● open[/green]"
+            elif c["port"] in tunnels_by_port:
+                status = "[yellow]○ port in use[/yellow]"
+            else:
+                status = "[dim]○ closed[/dim]"
             table.add_row("", c["context"], c["ssh_host"], c["server"], status)
 
         console.print(table)
         console.print()
 
-        openable   = [c for c in ssh_ctxs if c["port"] and c["port"] not in tunneled_ports]
+        openable   = [c for c in ssh_ctxs if c["port"] and c["port"] not in tunnels_by_port]
         closeable  = [t for t in active_tunnels]
 
         choices = []
