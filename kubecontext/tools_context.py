@@ -48,6 +48,9 @@ def save_kubeconfig(config: dict, path: Path | None = None) -> None:
     path.chmod(0o600)
 
 
+MAX_BACKUPS = 2
+
+
 def backup_kubeconfig() -> Path | None:
     if not KUBECONFIG_PATH.exists():
         return None
@@ -55,7 +58,14 @@ def backup_kubeconfig() -> Path | None:
     backup = KUBECONFIG_PATH.parent / f"config.backup.{ts}"
     shutil.copy2(KUBECONFIG_PATH, backup)
     console.print(f"[dim]  Backup → {backup}[/dim]")
+    _rotate_backups()
     return backup
+
+
+def _rotate_backups() -> None:
+    backups = sorted(KUBECONFIG_PATH.parent.glob("config.backup.*"))
+    for old in backups[:-MAX_BACKUPS]:
+        old.unlink()
 
 
 def rename_config_for_host(remote: dict, hostname: str) -> dict:
