@@ -102,6 +102,14 @@ def set_cluster_server_port(config: dict, cluster_name: str, new_port: int) -> N
         return
 
 
+def cluster_server_map(config: dict, default: str = "") -> dict:
+    """Map cluster name -> server URL, for looking up a context's server by its cluster ref."""
+    return {
+        c["name"]: (c.get("cluster") or {}).get("server", default)
+        for c in get_list(config, "clusters")
+    }
+
+
 def filter_contexts(config: dict, keep: list[str]) -> dict:
     """Return a copy of config containing only the named contexts and their clusters/users."""
     cfg      = copy.deepcopy(config)

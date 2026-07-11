@@ -12,7 +12,14 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from . import tools_context
-from .tools_context import filter_contexts, get_list, load_kubeconfig, merge_configs, save_kubeconfig
+from .tools_context import (
+    cluster_server_map,
+    filter_contexts,
+    get_list,
+    load_kubeconfig,
+    merge_configs,
+    save_kubeconfig,
+)
 
 console = Console()
 
@@ -23,10 +30,7 @@ def show_contexts_table() -> None:
     config   = load_kubeconfig()
     contexts = get_list(config, "contexts")
     current  = config.get("current-context", "")
-    cluster_servers = {
-        c["name"]: (c.get("cluster") or {}).get("server", "")
-        for c in get_list(config, "clusters")
-    }
+    cluster_servers = cluster_server_map(config)
 
     if not contexts:
         console.print("[dim]No contexts configured.[/dim]")
@@ -188,25 +192,11 @@ def export_contexts_menu() -> None:
 
 # ── Import from File ─────────────────────────────────────────────────────────
 
-def import_file_menu() -> None:
-    path_str = questionary.text("Path to kubeconfig file:").ask()
-    if not path_str:
-        return
-
-    path = Path(path_str.strip()).expanduser()
-    if not path.exists():
-        console.print(f"[red]✗ File not found: {path}[/red]")
-        return
-
-    try:
-        remote = load_kubeconfig(path)
-    except Exception as exc:
-        console.print(f"[red]✗ Failed to load {path}: {exc}[/red]")
-        return
-
+def import_and_merge(remote: dict, empty_message: str = "No contexts found.") -> None:
+    """Preview `remote` merged into the current kubeconfig and write it on confirm."""
     all_names = [c["name"] for c in get_list(remote, "contexts")]
     if not all_names:
-        console.print("[yellow]No contexts found in file.[/yellow]")
+        console.print(f"[yellow]{empty_message}[/yellow]")
         return
 
     if len(all_names) > 1:
@@ -253,6 +243,25 @@ def import_file_menu() -> None:
     tmp_path.unlink(missing_ok=True)
 
 
+def import_file_menu() -> None:
+    path_str = questionary.text("Path to kubeconfig file:").ask()
+    if not path_str:
+        return
+
+    path = Path(path_str.strip()).expanduser()
+    if not path.exists():
+        console.print(f"[red]✗ File not found: {path}[/red]")
+        return
+
+    try:
+        remote = load_kubeconfig(path)
+    except Exception as exc:
+        console.print(f"[red]✗ Failed to load {path}: {exc}[/red]")
+        return
+
+    import_and_merge(remote, empty_message="No contexts found in file.")
+
+
 # ── Validate Contexts ─────────────────────────────────────────────────────────
 
 def validate_contexts_menu() -> None:
@@ -266,10 +275,7 @@ def validate_contexts_menu() -> None:
         console.print("[yellow]No contexts found.[/yellow]")
         return
 
-    cluster_servers = {
-        c["name"]: (c.get("cluster") or {}).get("server", "?")
-        for c in get_list(config, "clusters")
-    }
+    cluster_servers = cluster_server_map(config, default="?")
 
     table = Table(title="Context Validation", show_header=True, header_style="bold")
     table.add_column("Context", style="cyan", no_wrap=True)

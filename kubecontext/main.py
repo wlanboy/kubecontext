@@ -1,33 +1,27 @@
 #!/usr/bin/env python3
 """kubecontext — Kubeconfig manager with SSH import, merge, and context switching."""
 
-import shutil
 import sys
-import tempfile
-from pathlib import Path
 from urllib.parse import urlparse
 
 import questionary
-import yaml
 from rich.console import Console
 from rich.panel import Panel
-from rich.syntax import Syntax
 from rich.table import Table
 
-from . import tools_context
 from .context import (
     delete_context_menu,
     export_contexts_menu,
+    import_and_merge,
     import_file_menu,
     set_current_context_menu,
     show_contexts_table,
     validate_contexts_menu,
 )
 from .tools_context import (
-    filter_contexts,
+    cluster_server_map,
     get_list,
     load_kubeconfig,
-    merge_configs,
     rename_config_for_host,
     save_kubeconfig,
     set_cluster_server_port,
@@ -63,51 +57,8 @@ def ssh_import_menu() -> None:
     if not remote:
         return
 
-    renamed   = rename_config_for_host(remote, hostname)
-    all_names = [c["name"] for c in get_list(renamed, "contexts")]
-
-    if len(all_names) > 1:
-        selected_names = questionary.checkbox(
-            "Select contexts to import:",
-            choices=all_names,
-            validate=lambda v: True if v else "Select at least one context",
-        ).ask()
-        if not selected_names:
-            return
-        renamed = filter_contexts(renamed, selected_names)
-
-    new_names = [c["name"] for c in get_list(renamed, "contexts")]
-
-    console.print("\n[bold]Contexts to import:[/bold]")
-    for n in new_names:
-        console.print(f"  [cyan]+[/cyan] {n}")
-
-    base = load_kubeconfig()
-    existing = {c["name"] for c in get_list(base, "contexts")}
-    overwrites = [n for n in new_names if n in existing]
-    if overwrites:
-        console.print(f"\n[yellow]Will overwrite existing:[/yellow] {', '.join(overwrites)}")
-
-    merged = merge_configs(base, renamed)
-
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False, prefix="kubeconfig_preview_"
-    ) as tmp:
-        yaml.dump(merged, tmp, default_flow_style=False, allow_unicode=True)
-        tmp_path = Path(tmp.name)
-
-    console.print("\n[bold]Preview — merged config:[/bold]")
-    console.print(Syntax(tmp_path.read_text(), "yaml", theme="monokai", line_numbers=True))
-
-    if questionary.confirm(f"Write to {tools_context.KUBECONFIG_PATH}?", default=False).ask():
-        tools_context.backup_kubeconfig()
-        shutil.copy2(tmp_path, tools_context.KUBECONFIG_PATH)
-        tools_context.KUBECONFIG_PATH.chmod(0o600)
-        console.print(f"[green]✓ Config updated. Contexts: {', '.join(new_names)}[/green]")
-    else:
-        console.print("[dim]Aborted — no changes.[/dim]")
-
-    tmp_path.unlink(missing_ok=True)
+    renamed = rename_config_for_host(remote, hostname)
+    import_and_merge(renamed)
 
 
 # ── SSH Tunnels ───────────────────────────────────────────────────────────────
@@ -116,10 +67,7 @@ def _ssh_contexts() -> list[dict]:
     """Return contexts whose name contains '@' (imported via SSH)."""
     config = load_kubeconfig()
     contexts = get_list(config, "contexts")
-    cluster_servers = {
-        c["name"]: (c.get("cluster") or {}).get("server", "")
-        for c in get_list(config, "clusters")
-    }
+    cluster_servers = cluster_server_map(config)
     result = []
     for ctx in contexts:
         name = ctx["name"]
