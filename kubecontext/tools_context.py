@@ -4,6 +4,7 @@ import copy
 import shutil
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 from rich.console import Console
@@ -88,6 +89,17 @@ def rename_config_for_host(remote: dict, hostname: str) -> dict:
     cfg["contexts"]  = contexts
     cfg["users"]     = users
     return cfg
+
+
+def set_cluster_server_port(config: dict, cluster_name: str, new_port: int) -> None:
+    """Rewrite the port of a cluster's server URL in place, keeping scheme and host."""
+    for c in get_list(config, "clusters"):
+        if c["name"] != cluster_name:
+            continue
+        cluster = c.get("cluster") or {}
+        parsed = urlparse(cluster.get("server", ""))
+        cluster["server"] = parsed._replace(netloc=f"{parsed.hostname}:{new_port}").geturl()
+        return
 
 
 def filter_contexts(config: dict, keep: list[str]) -> dict:

@@ -3,6 +3,7 @@
 import json
 import os
 import signal
+import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -16,6 +17,7 @@ console = Console()
 
 SSH_CONFIG_PATH  = Path.home() / ".ssh" / "config"
 TUNNEL_STATE_PATH = Path.home() / ".kube" / "kubecontext_tunnels.json"
+REMOTE_PORT_MAP_PATH = Path.home() / ".kube" / "kubecontext_remote_ports.json"
 
 # How long to wait for ssh to fail fast (auth error, port in use, unreachable
 # host) before we trust the tunnel is actually up.
@@ -155,6 +157,40 @@ def get_tunnels() -> list[SshTunnel]:
     return list(_active_tunnels)
 
 
+def find_free_local_port(preferred: int) -> int:
+    """Return `preferred` if it's free on localhost, else an OS-assigned free port."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", preferred))
+            return preferred
+        except OSError:
+            pass
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def remote_port_for(context_name: str, current_port: int) -> int:
+    """Return the true remote-side port to forward to for a context's tunnel.
+
+    A context's local port can be reassigned (see find_free_local_port) when it
+    collides with another tunnel, and the kubeconfig's cluster.server is then
+    rewritten to that new local port. That would make the remote port
+    unrecoverable on the next read, so the first port ever seen for a context
+    is remembered here and used as the ssh -L remote-side port from then on.
+    """
+    try:
+        m = json.loads(REMOTE_PORT_MAP_PATH.read_text())
+    except Exception:
+        m = {}
+    if context_name not in m:
+        m[context_name] = current_port
+        REMOTE_PORT_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
+        REMOTE_PORT_MAP_PATH.write_text(json.dumps(m, indent=2))
+    return m[context_name]
+
+
 def parse_ssh_config() -> list[str]:
     """Return all non-wildcard Host entries from ~/.ssh/config."""
     if not SSH_CONFIG_PATH.exists():
@@ -193,7 +229,7 @@ def download_remote_kubeconfig(hostname: str) -> dict | None:
     try:
         client = paramiko.SSHClient()
         client.load_system_host_keys()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
         with client:
             client.connect(**connect_kwargs)
@@ -207,6 +243,8 @@ def download_remote_kubeconfig(hostname: str) -> dict | None:
         console.print(f"[red]✗ No ~/.kube/config on {hostname}[/red]")
     except paramiko.AuthenticationException:
         console.print(f"[red]✗ SSH auth failed for {hostname}[/red]")
+    except paramiko.SSHException as exc:
+        console.print(f"[red]✗ {hostname}: host key not trusted ({exc})[/red]")
     except Exception as exc:
         console.print(f"[red]✗ {hostname}: {exc}[/red]")
     return None

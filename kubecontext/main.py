@@ -23,14 +23,24 @@ from .context import (
     show_contexts_table,
     validate_contexts_menu,
 )
-from .tools_context import filter_contexts, get_list, load_kubeconfig, merge_configs, rename_config_for_host
+from .tools_context import (
+    filter_contexts,
+    get_list,
+    load_kubeconfig,
+    merge_configs,
+    rename_config_for_host,
+    save_kubeconfig,
+    set_cluster_server_port,
+)
 from .tools_ssh import (
     close_tunnel,
     download_remote_kubeconfig,
+    find_free_local_port,
     get_tunnels,
     load_tunnels,
     open_tunnel,
     parse_ssh_config,
+    remote_port_for,
 )
 
 console = Console()
@@ -124,8 +134,10 @@ def _ssh_contexts() -> list[dict]:
         result.append({
             "context":     name,
             "ssh_host":    ssh_host,
+            "cluster":     cluster_ref,
             "remote_host": remote_host,
             "port":        port,
+            "remote_port": remote_port_for(name, port) if port else None,
             "server":      server,
         })
     return result
@@ -169,7 +181,7 @@ def ssh_tunnel_menu() -> None:
         console.print(table)
         console.print()
 
-        openable   = [c for c in ssh_ctxs if c["port"] and c["port"] not in tunnels_by_port]
+        openable   = [c for c in ssh_ctxs if c["port"] and not _matching_tunnel(c)]
         closeable  = [t for t in active_tunnels]
 
         choices = []
@@ -189,11 +201,20 @@ def ssh_tunnel_menu() -> None:
             selected = questionary.select("Open tunnel for:", choices=opts).ask()
             if not selected:
                 continue
+            local_port = find_free_local_port(selected["port"])
+            if local_port != selected["port"]:
+                config = load_kubeconfig()
+                set_cluster_server_port(config, selected["cluster"], local_port)
+                save_kubeconfig(config)
+                console.print(
+                    f"[dim]Local port {selected['port']} busy — reassigned "
+                    f"{selected['context']} to {local_port} (kubeconfig updated)[/dim]"
+                )
             tunnel = open_tunnel(
                 selected["ssh_host"],
-                selected["port"],
+                local_port,
                 selected["remote_host"],
-                selected["port"],
+                selected["remote_port"],
             )
             if tunnel:
                 console.print(f"[green]✓ Tunnel open: {tunnel.label}[/green]")
