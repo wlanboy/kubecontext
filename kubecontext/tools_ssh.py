@@ -67,6 +67,7 @@ def _save_state() -> None:
     ]
     TUNNEL_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     TUNNEL_STATE_PATH.write_text(json.dumps(data, indent=2))
+    TUNNEL_STATE_PATH.chmod(0o600)
 
 
 def load_tunnels() -> None:
