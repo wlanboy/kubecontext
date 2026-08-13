@@ -2,11 +2,17 @@
 import subprocess
 from unittest.mock import MagicMock, patch
 
+import pytest
 import yaml
+from conftest import (
+    REMOTE_MULTI,
+    REMOTE_SINGLE,
+    SAMPLE_KUBECONFIG,
+    make_mock_ssh_client,
+)
 
 from kubecontext import main
-from conftest import REMOTE_MULTI, REMOTE_SINGLE, SAMPLE_KUBECONFIG, make_mock_ssh_client
-from kubecontext.tools_context import load_kubeconfig, _empty_config
+from kubecontext.tools_context import _empty_config, load_kubeconfig
 
 
 class TestSetCurrentContextMenu:
@@ -552,6 +558,11 @@ class TestImportFileMenu:
 
 
 class TestSshContexts:
+    @pytest.fixture(autouse=True)
+    def _isolate_remote_maps(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("kubecontext.tools_ssh.REMOTE_HOST_MAP_PATH", tmp_path / "remote_hosts.json")
+        monkeypatch.setattr("kubecontext.tools_ssh.REMOTE_PORT_MAP_PATH", tmp_path / "remote_ports.json")
+
     def _make_config(self, contexts, clusters):
         return {
             "apiVersion": "v1", "kind": "Config", "preferences": {},
@@ -630,3 +641,25 @@ class TestSshContexts:
             result = main._ssh_contexts()
         assert len(result) == 2
         assert {r["ssh_host"] for r in result} == {"a", "b"}
+
+    def test_remote_host_survives_tunnel_rewrite_to_localhost(self, tmp_path):
+        """Regression test: once a tunnel rewrites cluster.server to 127.0.0.1
+        (see set_cluster_server_endpoint), re-deriving remote_host straight
+        from the kubeconfig would wrongly return 127.0.0.1 instead of the
+        node's real address — the ssh -L target would then point at the
+        wrong host. remote_host_for must keep returning the original.
+        """
+        cfg = self._make_config(
+            contexts=[{"name": "bastion@default", "context": {"cluster": "bastion@default", "user": "u"}}],
+            clusters=[{"name": "bastion@default", "cluster": {"server": "https://192.168.1.1:6443"}}],
+        )
+        with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
+            first = main._ssh_contexts()
+        assert first[0]["remote_host"] == "192.168.1.1"
+
+        # Simulate what opening a tunnel does: rewrite the local kubeconfig's
+        # cluster.server to point at the tunnel's local endpoint.
+        cfg["clusters"][0]["cluster"]["server"] = "https://127.0.0.1:6443"
+        with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
+            second = main._ssh_contexts()
+        assert second[0]["remote_host"] == "192.168.1.1"

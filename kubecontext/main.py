@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """kubecontext — Kubeconfig manager with SSH import, merge, and context switching."""
 
 import sys
@@ -24,7 +23,7 @@ from .tools_context import (
     load_kubeconfig,
     rename_config_for_host,
     save_kubeconfig,
-    set_cluster_server_port,
+    set_cluster_server_endpoint,
 )
 from .tools_ssh import (
     close_tunnel,
@@ -34,6 +33,7 @@ from .tools_ssh import (
     load_tunnels,
     open_tunnel,
     parse_ssh_config,
+    remote_host_for,
     remote_port_for,
 )
 
@@ -77,7 +77,8 @@ def _ssh_contexts() -> list[dict]:
         cluster_ref  = (ctx.get("context") or {}).get("cluster", "")
         server       = cluster_servers.get(cluster_ref, "")
         parsed       = urlparse(server)
-        remote_host  = parsed.hostname or "localhost"
+        seed_host    = parsed.hostname or "localhost"
+        remote_host  = remote_host_for(name, seed_host)
         port         = parsed.port
         result.append({
             "context":     name,
@@ -101,7 +102,7 @@ def ssh_tunnel_menu() -> None:
         active_tunnels = get_tunnels()
         tunnels_by_port = {t.local_port: t for t in active_tunnels}
 
-        def _matching_tunnel(c: dict):
+        def _matching_tunnel(c: dict, tunnels_by_port=tunnels_by_port):
             """Tunnel that actually forwards for this context (same SSH host + target)."""
             t = tunnels_by_port.get(c["port"])
             if t and t.host == c["ssh_host"] and t.remote_host == c["remote_host"]:
@@ -150,13 +151,14 @@ def ssh_tunnel_menu() -> None:
             if not selected:
                 continue
             local_port = find_free_local_port(selected["port"])
-            if local_port != selected["port"]:
+            already_tunneled = urlparse(selected["server"]).hostname == "127.0.0.1"
+            if not already_tunneled or local_port != selected["port"]:
                 config = load_kubeconfig()
-                set_cluster_server_port(config, selected["cluster"], local_port)
+                set_cluster_server_endpoint(config, selected["cluster"], "127.0.0.1", local_port)
                 save_kubeconfig(config)
                 console.print(
-                    f"[dim]Local port {selected['port']} busy — reassigned "
-                    f"{selected['context']} to {local_port} (kubeconfig updated)[/dim]"
+                    f"[dim]{selected['context']} now points to 127.0.0.1:{local_port} "
+                    f"(tunneled via {selected['ssh_host']}) — kubeconfig updated[/dim]"
                 )
             tunnel = open_tunnel(
                 selected["ssh_host"],

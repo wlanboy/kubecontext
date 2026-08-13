@@ -1,11 +1,12 @@
 """Tests for tools_context: IO, backup, rename, merge."""
 import copy
+from typing import Any
 from unittest.mock import patch
 
 import yaml
+from conftest import REMOTE_MULTI, REMOTE_SINGLE, SAMPLE_KUBECONFIG
 
 import kubecontext.tools_context as ctx
-from conftest import REMOTE_SINGLE, REMOTE_MULTI, SAMPLE_KUBECONFIG
 
 
 class TestGetList:
@@ -224,3 +225,35 @@ class TestMergeConfigs:
         assert len(merged["clusters"]) == 1
         assert len(merged["contexts"]) == 1
         assert len(merged["users"])    == 1
+
+
+class TestSetClusterServerEndpoint:
+    def test_rewrites_host_and_port(self):
+        config = {
+            "clusters": [{"name": "c1", "cluster": {"server": "https://192.168.1.50:6443"}}],
+        }
+        ctx.set_cluster_server_endpoint(config, "c1", "127.0.0.1", 6444)
+        assert config["clusters"][0]["cluster"]["server"] == "https://127.0.0.1:6444"
+
+    def test_keeps_scheme(self):
+        config = {
+            "clusters": [{"name": "c1", "cluster": {"server": "http://node.example:8080"}}],
+        }
+        ctx.set_cluster_server_endpoint(config, "c1", "127.0.0.1", 9000)
+        assert config["clusters"][0]["cluster"]["server"] == "http://127.0.0.1:9000"
+
+    def test_ignores_other_clusters(self):
+        config = {
+            "clusters": [
+                {"name": "c1", "cluster": {"server": "https://10.0.0.1:6443"}},
+                {"name": "c2", "cluster": {"server": "https://10.0.0.2:6443"}},
+            ],
+        }
+        ctx.set_cluster_server_endpoint(config, "c2", "127.0.0.1", 7000)
+        assert config["clusters"][0]["cluster"]["server"] == "https://10.0.0.1:6443"
+        assert config["clusters"][1]["cluster"]["server"] == "https://127.0.0.1:7000"
+
+    def test_creates_missing_cluster_subdict(self):
+        config: dict[str, Any] = {"clusters": [{"name": "c1"}]}
+        ctx.set_cluster_server_endpoint(config, "c1", "127.0.0.1", 6443)
+        assert config["clusters"][0]["cluster"]["server"] == "//127.0.0.1:6443"

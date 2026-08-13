@@ -179,10 +179,11 @@ def export_contexts_menu() -> None:
         return
 
     out_path = Path(out_path_str.strip()).expanduser()
-    if out_path.exists():
-        if not questionary.confirm(f"{out_path} already exists — overwrite?", default=False).ask():
-            console.print("[dim]Aborted.[/dim]")
-            return
+    if out_path.exists() and not questionary.confirm(
+        f"{out_path} already exists — overwrite?", default=False
+    ).ask():
+        console.print("[dim]Aborted.[/dim]")
+        return
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(export_yaml)
@@ -255,7 +256,7 @@ def import_file_menu() -> None:
 
     try:
         remote = load_kubeconfig(path)
-    except Exception as exc:
+    except (OSError, yaml.YAMLError) as exc:
         console.print(f"[red]✗ Failed to load {path}: {exc}[/red]")
         return
 
@@ -294,6 +295,7 @@ def validate_contexts_menu() -> None:
                     capture_output=True,
                     text=True,
                     timeout=10,
+                    check=False,
                 )
                 if result.returncode == 0:
                     status = "[green]✓ OK[/green]"

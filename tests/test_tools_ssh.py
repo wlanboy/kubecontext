@@ -4,9 +4,9 @@ import signal
 from unittest.mock import MagicMock, patch
 
 import yaml
+from conftest import REMOTE_SINGLE, make_mock_ssh_client
 
 import kubecontext.tools_ssh as ssh
-from conftest import REMOTE_SINGLE, make_mock_ssh_client
 
 
 class TestParseSshConfig:
@@ -155,11 +155,13 @@ class TestSshTunnels:
         t = ssh.SshTunnel("host", 6443, "localhost", 6443, pid=3333)
         ssh._active_tunnels.append(t)
 
-        with patch("kubecontext.tools_ssh.os.kill") as mock_kill, \
-             patch("kubecontext.tools_ssh.TUNNEL_STATE_PATH", state_file):
-            # make alive return True so close actually sends signal
-            with patch.object(type(t), "alive", new_callable=lambda: property(lambda self: True)):
-                ssh.close_tunnel(t)
+        # make alive return True so close actually sends signal
+        with (
+            patch("kubecontext.tools_ssh.os.kill") as mock_kill,
+            patch("kubecontext.tools_ssh.TUNNEL_STATE_PATH", state_file),
+            patch.object(type(t), "alive", new_callable=lambda: property(lambda self: True)),
+        ):
+            ssh.close_tunnel(t)
 
         mock_kill.assert_called_once_with(3333, signal.SIGTERM)
 
@@ -244,3 +246,31 @@ class TestSshTunnels:
     def test_tunnel_label(self):
         t = ssh.SshTunnel("myhost", 6443, "127.0.0.1", 6443, pid=1)
         assert t.label == "localhost:6443 → myhost:127.0.0.1:6443"
+
+
+class TestRemoteEndpointMaps:
+    def test_remote_port_for_seeds_and_persists(self, tmp_path):
+        path = tmp_path / "ports.json"
+        with patch("kubecontext.tools_ssh.REMOTE_PORT_MAP_PATH", path):
+            assert ssh.remote_port_for("host@ctx", 6443) == 6443
+            # A later call with a different (e.g. reassigned local) port must
+            # keep returning the first-ever-seen value, not the new one.
+            assert ssh.remote_port_for("host@ctx", 7000) == 6443
+        assert json.loads(path.read_text()) == {"host@ctx": 6443}
+
+    def test_remote_host_for_seeds_and_persists(self, tmp_path):
+        path = tmp_path / "hosts.json"
+        with patch("kubecontext.tools_ssh.REMOTE_HOST_MAP_PATH", path):
+            assert ssh.remote_host_for("host@ctx", "192.168.1.50") == "192.168.1.50"
+            # Once a tunnel rewrites the kubeconfig's server to 127.0.0.1, the
+            # next read must still resolve to the true original remote host.
+            assert ssh.remote_host_for("host@ctx", "127.0.0.1") == "192.168.1.50"
+        assert json.loads(path.read_text()) == {"host@ctx": "192.168.1.50"}
+
+    def test_remote_host_for_keeps_contexts_independent(self, tmp_path):
+        path = tmp_path / "hosts.json"
+        with patch("kubecontext.tools_ssh.REMOTE_HOST_MAP_PATH", path):
+            ssh.remote_host_for("a@ctx1", "10.0.0.1")
+            ssh.remote_host_for("b@ctx2", "10.0.0.2")
+        data = json.loads(path.read_text())
+        assert data == {"a@ctx1": "10.0.0.1", "b@ctx2": "10.0.0.2"}

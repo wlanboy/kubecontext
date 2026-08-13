@@ -54,7 +54,7 @@ MAX_BACKUPS = 2
 def backup_kubeconfig() -> Path | None:
     if not KUBECONFIG_PATH.exists():
         return None
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
     backup = KUBECONFIG_PATH.parent / f"config.backup.{ts}"
     shutil.copy2(KUBECONFIG_PATH, backup)
     console.print(f"[dim]  Backup → {backup}[/dim]")
@@ -101,14 +101,17 @@ def rename_config_for_host(remote: dict, hostname: str) -> dict:
     return cfg
 
 
-def set_cluster_server_port(config: dict, cluster_name: str, new_port: int) -> None:
-    """Rewrite the port of a cluster's server URL in place, keeping scheme and host."""
+def set_cluster_server_endpoint(config: dict, cluster_name: str, new_host: str, new_port: int) -> None:
+    """Rewrite a cluster's server URL in place to point at new_host:new_port, keeping scheme."""
     for c in get_list(config, "clusters"):
         if c["name"] != cluster_name:
             continue
-        cluster = c.get("cluster") or {}
+        cluster = c.get("cluster")
+        if cluster is None:
+            cluster = {}
+            c["cluster"] = cluster
         parsed = urlparse(cluster.get("server", ""))
-        cluster["server"] = parsed._replace(netloc=f"{parsed.hostname}:{new_port}").geturl()
+        cluster["server"] = parsed._replace(netloc=f"{new_host}:{new_port}").geturl()
         return
 
 

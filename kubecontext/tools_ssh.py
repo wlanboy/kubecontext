@@ -18,6 +18,7 @@ console = Console()
 SSH_CONFIG_PATH  = Path.home() / ".ssh" / "config"
 TUNNEL_STATE_PATH = Path.home() / ".kube" / "kubecontext_tunnels.json"
 REMOTE_PORT_MAP_PATH = Path.home() / ".kube" / "kubecontext_remote_ports.json"
+REMOTE_HOST_MAP_PATH = Path.home() / ".kube" / "kubecontext_remote_hosts.json"
 
 # How long to wait for ssh to fail fast (auth error, port in use, unreachable
 # host) before we trust the tunnel is actually up.
@@ -76,7 +77,7 @@ def load_tunnels() -> None:
         return
     try:
         data = json.loads(TUNNEL_STATE_PATH.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return
     for entry in data:
         t = SshTunnel(
@@ -183,12 +184,33 @@ def remote_port_for(context_name: str, current_port: int) -> int:
     """
     try:
         m = json.loads(REMOTE_PORT_MAP_PATH.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         m = {}
     if context_name not in m:
         m[context_name] = current_port
         REMOTE_PORT_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
         REMOTE_PORT_MAP_PATH.write_text(json.dumps(m, indent=2))
+    return m[context_name]
+
+
+def remote_host_for(context_name: str, current_host: str) -> str:
+    """Return the true remote-side host to forward to for a context's tunnel.
+
+    Once a tunnel is opened, the kubeconfig's cluster.server is rewritten to
+    127.0.0.1 so kubectl actually goes through the tunnel instead of dialing
+    the original host directly (see set_cluster_server_endpoint). That would
+    make the real remote host unrecoverable on the next read, so the first
+    host ever seen for a context is remembered here and used as the ssh -L
+    remote-side host from then on.
+    """
+    try:
+        m = json.loads(REMOTE_HOST_MAP_PATH.read_text())
+    except (OSError, json.JSONDecodeError):
+        m = {}
+    if context_name not in m:
+        m[context_name] = current_host
+        REMOTE_HOST_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
+        REMOTE_HOST_MAP_PATH.write_text(json.dumps(m, indent=2))
     return m[context_name]
 
 
@@ -234,9 +256,8 @@ def download_remote_kubeconfig(hostname: str) -> dict | None:
 
         with client:
             client.connect(**connect_kwargs)
-            with client.open_sftp() as sftp:
-                with sftp.open(".kube/config") as f:
-                    content = f.read()
+            with client.open_sftp() as sftp, sftp.open(".kube/config") as f:
+                content = f.read()
 
         return yaml.safe_load(content)
 
@@ -246,6 +267,6 @@ def download_remote_kubeconfig(hostname: str) -> dict | None:
         console.print(f"[red]✗ SSH auth failed for {hostname}[/red]")
     except paramiko.SSHException as exc:
         console.print(f"[red]✗ {hostname}: host key not trusted ({exc})[/red]")
-    except Exception as exc:
+    except (OSError, yaml.YAMLError) as exc:
         console.print(f"[red]✗ {hostname}: {exc}[/red]")
     return None
