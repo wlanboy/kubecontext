@@ -3,6 +3,7 @@ import json
 import signal
 from unittest.mock import MagicMock, patch
 
+import pytest
 import yaml
 from conftest import REMOTE_SINGLE, make_mock_ssh_client
 
@@ -274,3 +275,100 @@ class TestRemoteEndpointMaps:
             ssh.remote_host_for("b@ctx2", "10.0.0.2")
         data = json.loads(path.read_text())
         assert data == {"a@ctx1": "10.0.0.1", "b@ctx2": "10.0.0.2"}
+
+
+class TestSshContexts:
+    @pytest.fixture(autouse=True)
+    def _isolate_remote_maps(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("kubecontext.tools_ssh.REMOTE_HOST_MAP_PATH", tmp_path / "remote_hosts.json")
+        monkeypatch.setattr("kubecontext.tools_ssh.REMOTE_PORT_MAP_PATH", tmp_path / "remote_ports.json")
+
+    def _make_config(self, contexts, clusters):
+        return {
+            "apiVersion": "v1", "kind": "Config", "preferences": {},
+            "contexts": contexts,
+            "clusters": clusters,
+            "users": [],
+            "current-context": "",
+        }
+
+    def test_returns_ssh_contexts_with_at_in_name(self):
+        cfg = self._make_config(
+            contexts=[{"name": "bastion@default", "context": {"cluster": "bastion@default", "user": "u"}}],
+            clusters=[{"name": "bastion@default", "cluster": {"server": "https://192.168.1.1:6443"}}],
+        )
+        with patch("kubecontext.tools_ssh.load_kubeconfig", return_value=cfg):
+            result = ssh.ssh_contexts()
+        assert len(result) == 1
+        assert result[0].context == "bastion@default"
+        assert result[0].ssh_host == "bastion"
+        assert result[0].remote_host == "192.168.1.1"
+        assert result[0].port == 6443
+
+    def test_excludes_contexts_without_at(self):
+        cfg = self._make_config(
+            contexts=[{"name": "local", "context": {"cluster": "local", "user": "u"}}],
+            clusters=[{"name": "local", "cluster": {"server": "https://localhost:6443"}}],
+        )
+        with patch("kubecontext.tools_ssh.load_kubeconfig", return_value=cfg):
+            result = ssh.ssh_contexts()
+        assert result == []
+
+    def test_handles_missing_port_in_server_url(self):
+        cfg = self._make_config(
+            contexts=[{"name": "host@ctx", "context": {"cluster": "host@ctx", "user": "u"}}],
+            clusters=[{"name": "host@ctx", "cluster": {"server": "https://10.0.0.1"}}],
+        )
+        with patch("kubecontext.tools_ssh.load_kubeconfig", return_value=cfg):
+            result = ssh.ssh_contexts()
+        assert result[0].port is None
+
+    def test_handles_unknown_cluster_ref(self):
+        cfg = self._make_config(
+            contexts=[{"name": "host@ctx", "context": {"cluster": "missing-cluster", "user": "u"}}],
+            clusters=[],
+        )
+        with patch("kubecontext.tools_ssh.load_kubeconfig", return_value=cfg):
+            result = ssh.ssh_contexts()
+        assert result[0].server == ""
+        assert result[0].remote_host == "localhost"
+
+    def test_multiple_ssh_contexts_returned(self):
+        cfg = self._make_config(
+            contexts=[
+                {"name": "a@ctx1", "context": {"cluster": "a@ctx1", "user": "u"}},
+                {"name": "b@ctx2", "context": {"cluster": "b@ctx2", "user": "u"}},
+                {"name": "local",  "context": {"cluster": "local",  "user": "u"}},
+            ],
+            clusters=[
+                {"name": "a@ctx1", "cluster": {"server": "https://10.0.0.1:6443"}},
+                {"name": "b@ctx2", "cluster": {"server": "https://10.0.0.2:6443"}},
+                {"name": "local",  "cluster": {"server": "https://localhost:6443"}},
+            ],
+        )
+        with patch("kubecontext.tools_ssh.load_kubeconfig", return_value=cfg):
+            result = ssh.ssh_contexts()
+        assert len(result) == 2
+        assert {r.ssh_host for r in result} == {"a", "b"}
+
+    def test_remote_host_survives_tunnel_rewrite_to_localhost(self):
+        """Regression test: once a tunnel rewrites cluster.server to 127.0.0.1
+        (see set_cluster_server_endpoint), re-deriving remote_host straight
+        from the kubeconfig would wrongly return 127.0.0.1 instead of the
+        node's real address — the ssh -L target would then point at the
+        wrong host. remote_host_for must keep returning the original.
+        """
+        cfg = self._make_config(
+            contexts=[{"name": "bastion@default", "context": {"cluster": "bastion@default", "user": "u"}}],
+            clusters=[{"name": "bastion@default", "cluster": {"server": "https://192.168.1.1:6443"}}],
+        )
+        with patch("kubecontext.tools_ssh.load_kubeconfig", return_value=cfg):
+            first = ssh.ssh_contexts()
+        assert first[0].remote_host == "192.168.1.1"
+
+        # Simulate what opening a tunnel does: rewrite the local kubeconfig's
+        # cluster.server to point at the tunnel's local endpoint.
+        cfg["clusters"][0]["cluster"]["server"] = "https://127.0.0.1:6443"
+        with patch("kubecontext.tools_ssh.load_kubeconfig", return_value=cfg):
+            second = ssh.ssh_contexts()
+        assert second[0].remote_host == "192.168.1.1"

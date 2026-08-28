@@ -1,7 +1,6 @@
 """kubecontext — Kubeconfig manager with SSH import, merge, and context switching."""
 
 import sys
-from urllib.parse import urlparse
 
 import questionary
 from rich.panel import Panel
@@ -17,15 +16,7 @@ from .context import (
     show_contexts_table,
     validate_contexts_menu,
 )
-from .tools_context import (
-    cluster_server_map,
-    context_refs,
-    get_list,
-    load_kubeconfig,
-    rename_config_for_host,
-    save_kubeconfig,
-    set_cluster_server_endpoint,
-)
+from .tools_context import rename_config_for_host, repoint_cluster_to_local
 from .tools_ssh import (
     SshContext,
     close_tunnel,
@@ -35,8 +26,7 @@ from .tools_ssh import (
     load_tunnels,
     open_tunnel,
     parse_ssh_config,
-    remote_host_for,
-    remote_port_for,
+    ssh_contexts,
 )
 
 # ── SSH Import ────────────────────────────────────────────────────────────────
@@ -62,38 +52,9 @@ def ssh_import_menu() -> None:
 
 # ── SSH Tunnels ───────────────────────────────────────────────────────────────
 
-def _ssh_contexts() -> list[SshContext]:
-    """Return contexts whose name contains '@' (imported via SSH)."""
-    config = load_kubeconfig()
-    contexts = get_list(config, "contexts")
-    cluster_servers = cluster_server_map(config)
-    result = []
-    for ctx in contexts:
-        name = ctx["name"]
-        if "@" not in name:
-            continue
-        ssh_host, _ = name.split("@", 1)
-        cluster_ref = context_refs(ctx).cluster
-        server      = cluster_servers.get(cluster_ref, "")
-        parsed      = urlparse(server)
-        seed_host   = parsed.hostname or "localhost"
-        remote_host = remote_host_for(name, seed_host)
-        port        = parsed.port
-        result.append(SshContext(
-            context=name,
-            ssh_host=ssh_host,
-            cluster=cluster_ref,
-            remote_host=remote_host,
-            port=port,
-            remote_port=remote_port_for(name, port) if port else None,
-            server=server,
-        ))
-    return result
-
-
 def ssh_tunnel_menu() -> None:
     while True:
-        ssh_ctxs = _ssh_contexts()
+        ssh_ctxs = ssh_contexts()
         if not ssh_ctxs:
             console.print("[yellow]No SSH-imported contexts found (name must contain '@').[/yellow]")
             return
@@ -150,11 +111,7 @@ def ssh_tunnel_menu() -> None:
             if not selected:
                 continue
             local_port = find_free_local_port(selected.port)
-            already_tunneled = urlparse(selected.server).hostname == "127.0.0.1"
-            if not already_tunneled or local_port != selected.port:
-                config = load_kubeconfig()
-                set_cluster_server_endpoint(config, selected.cluster, "127.0.0.1", local_port)
-                save_kubeconfig(config)
+            if repoint_cluster_to_local(selected.cluster, local_port):
                 console.print(
                     f"[dim]{selected.context} now points to 127.0.0.1:{local_port} "
                     f"(tunneled via {selected.ssh_host}) — kubeconfig updated[/dim]"

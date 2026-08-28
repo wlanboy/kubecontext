@@ -127,6 +127,19 @@ def set_cluster_server_endpoint(config: dict, cluster_name: str, new_host: str, 
         return
 
 
+def repoint_cluster_to_local(cluster_name: str, local_port: int) -> bool:
+    """Point cluster_name's server at 127.0.0.1:local_port, persisting the change
+    unless it's already pointed there. Returns True if the kubeconfig was changed."""
+    config = load_kubeconfig()
+    server = cluster_server_map(config).get(cluster_name, "")
+    parsed = urlparse(server)
+    if (parsed.hostname, parsed.port) == ("127.0.0.1", local_port):
+        return False
+    set_cluster_server_endpoint(config, cluster_name, "127.0.0.1", local_port)
+    save_kubeconfig(config)
+    return True
+
+
 def cluster_server_map(config: dict, default: str = "") -> dict:
     """Map cluster name -> server URL, for looking up a context's server by its cluster ref."""
     return {

@@ -8,11 +8,13 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 import paramiko
 import yaml
 
 from ._console import console
+from .tools_context import cluster_server_map, context_refs, get_list, load_kubeconfig
 
 SSH_CONFIG_PATH  = Path.home() / ".ssh" / "config"
 TUNNEL_STATE_PATH = Path.home() / ".kube" / "kubecontext_tunnels.json"
@@ -38,6 +40,35 @@ class SshContext:
     port: int | None
     remote_port: int | None
     server: str
+
+
+def ssh_contexts() -> list[SshContext]:
+    """Return kubeconfig contexts whose name contains '@' (imported via SSH)."""
+    config = load_kubeconfig()
+    contexts = get_list(config, "contexts")
+    cluster_servers = cluster_server_map(config)
+    result = []
+    for ctx in contexts:
+        name = ctx["name"]
+        if "@" not in name:
+            continue
+        ssh_host, _ = name.split("@", 1)
+        cluster_ref = context_refs(ctx).cluster
+        server      = cluster_servers.get(cluster_ref, "")
+        parsed      = urlparse(server)
+        seed_host   = parsed.hostname or "localhost"
+        remote_host = remote_host_for(name, seed_host)
+        port        = parsed.port
+        result.append(SshContext(
+            context=name,
+            ssh_host=ssh_host,
+            cluster=cluster_ref,
+            remote_host=remote_host,
+            port=port,
+            remote_port=remote_port_for(name, port) if port else None,
+            server=server,
+        ))
+    return result
 
 
 # ── SSH Tunnel Management ─────────────────────────────────────────────────────
