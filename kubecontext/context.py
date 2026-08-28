@@ -7,21 +7,21 @@ from pathlib import Path
 
 import questionary
 import yaml
-from rich.console import Console
 from rich.syntax import Syntax
 from rich.table import Table
 
 from . import tools_context
+from ._console import console
 from .tools_context import (
     cluster_server_map,
+    context_refs,
+    dump_yaml,
     filter_contexts,
     get_list,
     load_kubeconfig,
     merge_configs,
     save_kubeconfig,
 )
-
-console = Console()
 
 
 # ── Overview Table ────────────────────────────────────────────────────────────
@@ -43,12 +43,11 @@ def show_contexts_table() -> None:
     table.add_column("User", style="dim")
 
     for ctx in contexts:
-        name        = ctx["name"]
-        cluster_ref = (ctx.get("context") or {}).get("cluster", "")
-        user_ref    = (ctx.get("context") or {}).get("user", "")
-        server      = cluster_servers.get(cluster_ref, "")
-        marker      = "[green]→[/green]" if name == current else ""
-        table.add_row(marker, name, server, user_ref)
+        name    = ctx["name"]
+        refs    = context_refs(ctx)
+        server  = cluster_servers.get(refs.cluster, "")
+        marker  = "[green]→[/green]" if name == current else ""
+        table.add_row(marker, name, server, refs.user)
 
     console.print(table)
 
@@ -102,23 +101,22 @@ def delete_context_menu() -> None:
     if not selected:
         return
 
-    ctx_obj     = next(c for c in contexts if c["name"] == selected)
-    cluster_ref = (ctx_obj.get("context") or {}).get("cluster", "")
-    user_ref    = (ctx_obj.get("context") or {}).get("user", "")
+    ctx_obj = next(c for c in contexts if c["name"] == selected)
+    refs    = context_refs(ctx_obj)
 
     other         = [c for c in contexts if c["name"] != selected]
-    used_clusters = {(c.get("context") or {}).get("cluster") for c in other}
-    used_users    = {(c.get("context") or {}).get("user")    for c in other}
+    used_clusters = {context_refs(c).cluster for c in other}
+    used_users    = {context_refs(c).user    for c in other}
 
-    orphan_cluster = cluster_ref and cluster_ref not in used_clusters
-    orphan_user    = user_ref    and user_ref    not in used_users
+    orphan_cluster = refs.cluster and refs.cluster not in used_clusters
+    orphan_user    = refs.user    and refs.user    not in used_users
 
     console.print("\n[bold]Will remove:[/bold]")
     console.print(f"  [red]−[/red] context: {selected}")
     if orphan_cluster:
-        console.print(f"  [red]−[/red] cluster: {cluster_ref}")
+        console.print(f"  [red]−[/red] cluster: {refs.cluster}")
     if orphan_user:
-        console.print(f"  [red]−[/red] user:    {user_ref}")
+        console.print(f"  [red]−[/red] user:    {refs.user}")
 
     if not questionary.confirm("Confirm delete?", default=False).ask():
         console.print("[dim]Aborted.[/dim]")
@@ -128,9 +126,9 @@ def delete_context_menu() -> None:
 
     config["contexts"] = [c for c in contexts if c["name"] != selected]
     if orphan_cluster:
-        config["clusters"] = [c for c in get_list(config, "clusters") if c["name"] != cluster_ref]
+        config["clusters"] = [c for c in get_list(config, "clusters") if c["name"] != refs.cluster]
     if orphan_user:
-        config["users"] = [u for u in get_list(config, "users") if u["name"] != user_ref]
+        config["users"] = [u for u in get_list(config, "users") if u["name"] != refs.user]
 
     if config.get("current-context") == selected:
         remaining = [c["name"] for c in config["contexts"]]
@@ -141,6 +139,16 @@ def delete_context_menu() -> None:
 
 
 # ── Export Contexts ───────────────────────────────────────────────────────────
+
+def select_contexts(prompt: str, names: list[str]) -> list[str] | None:
+    """Prompt to pick from `names` via checkbox; returns None if cancelled/empty."""
+    selected = questionary.checkbox(
+        prompt,
+        choices=names,
+        validate=lambda v: True if v else "Select at least one context",
+    ).ask()
+    return selected or None
+
 
 def export_contexts_menu() -> None:
     config   = load_kubeconfig()
@@ -154,11 +162,7 @@ def export_contexts_menu() -> None:
     if len(all_names) == 1:
         selected_names = all_names
     else:
-        selected_names = questionary.checkbox(
-            "Select contexts to export:",
-            choices=all_names,
-            validate=lambda v: True if v else "Select at least one context",
-        ).ask()
+        selected_names = select_contexts("Select contexts to export:", all_names)
         if not selected_names:
             return
 
@@ -171,7 +175,7 @@ def export_contexts_menu() -> None:
     if out_path_str is None:
         return
 
-    export_yaml = yaml.dump(exported, default_flow_style=False, allow_unicode=True)
+    export_yaml = dump_yaml(exported)
 
     if not out_path_str.strip():
         console.print("\n[bold]Exported kubeconfig:[/bold]")
@@ -201,11 +205,7 @@ def import_and_merge(remote: dict, empty_message: str = "No contexts found.") ->
         return
 
     if len(all_names) > 1:
-        selected_names = questionary.checkbox(
-            "Select contexts to import:",
-            choices=all_names,
-            validate=lambda v: True if v else "Select at least one context",
-        ).ask()
+        selected_names = select_contexts("Select contexts to import:", all_names)
         if not selected_names:
             return
         remote = filter_contexts(remote, selected_names)
@@ -227,7 +227,7 @@ def import_and_merge(remote: dict, empty_message: str = "No contexts found.") ->
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".yaml", delete=False, prefix="kubeconfig_preview_"
     ) as tmp:
-        yaml.dump(merged, tmp, default_flow_style=False, allow_unicode=True)
+        tmp.write(dump_yaml(merged))
         tmp_path = Path(tmp.name)
 
     console.print("\n[bold]Preview — merged config:[/bold]")
@@ -284,9 +284,8 @@ def validate_contexts_menu() -> None:
     table.add_column("Status")
 
     for ctx in contexts:
-        name        = ctx["name"]
-        cluster_ref = (ctx.get("context") or {}).get("cluster", "")
-        server      = cluster_servers.get(cluster_ref, "?")
+        name   = ctx["name"]
+        server = cluster_servers.get(context_refs(ctx).cluster, "?")
 
         with console.status(f"Checking [cyan]{name}[/cyan]…"):
             try:

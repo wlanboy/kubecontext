@@ -4,12 +4,12 @@ import copy
 import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import urlparse
 
 import yaml
-from rich.console import Console
 
-console = Console()
+from ._console import console
 
 KUBECONFIG_PATH = Path.home() / ".kube" / "config"
 
@@ -30,6 +30,21 @@ def get_list(config: dict, key: str) -> list:
     return config.get(key) or []
 
 
+class ContextRefs(NamedTuple):
+    cluster: str
+    user: str
+
+
+def context_refs(ctx: dict) -> ContextRefs:
+    """Return the (cluster, user) names a context entry points at."""
+    ref = ctx.get("context") or {}
+    return ContextRefs(ref.get("cluster", ""), ref.get("user", ""))
+
+
+def dump_yaml(config: dict) -> str:
+    return yaml.dump(config, default_flow_style=False, allow_unicode=True)
+
+
 def load_kubeconfig(path: Path | None = None) -> dict:
     if path is None:
         path = KUBECONFIG_PATH
@@ -39,13 +54,10 @@ def load_kubeconfig(path: Path | None = None) -> dict:
         return yaml.safe_load(f) or _empty_config()
 
 
-def save_kubeconfig(config: dict, path: Path | None = None) -> None:
-    if path is None:
-        path = KUBECONFIG_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w") as f:
-        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
-    path.chmod(0o600)
+def save_kubeconfig(config: dict) -> None:
+    KUBECONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    KUBECONFIG_PATH.write_text(dump_yaml(config))
+    KUBECONFIG_PATH.chmod(0o600)
 
 
 MAX_BACKUPS = 2
