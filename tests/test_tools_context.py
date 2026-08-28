@@ -44,26 +44,23 @@ class TestKubeconfigIO:
 
     def test_save_roundtrip(self, tmp_path):
         p = tmp_path / "config"
-        ctx.save_kubeconfig(SAMPLE_KUBECONFIG, p)
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", p):
+            ctx.save_kubeconfig(SAMPLE_KUBECONFIG)
         loaded = ctx.load_kubeconfig(p)
         assert loaded["current-context"] == "prod"
         assert len(loaded["contexts"]) == 2
 
     def test_save_creates_parent_dirs(self, tmp_path):
         p = tmp_path / "nested" / "dir" / "config"
-        ctx.save_kubeconfig(SAMPLE_KUBECONFIG, p)
+        with patch("kubecontext.tools_context.KUBECONFIG_PATH", p):
+            ctx.save_kubeconfig(SAMPLE_KUBECONFIG)
         assert p.exists()
 
     def test_save_sets_permissions_600(self, tmp_path):
         p = tmp_path / "config"
-        ctx.save_kubeconfig(SAMPLE_KUBECONFIG, p)
-        assert oct(p.stat().st_mode)[-3:] == "600"
-
-    def test_save_uses_module_default_when_no_arg(self, tmp_path):
-        p = tmp_path / "config"
         with patch("kubecontext.tools_context.KUBECONFIG_PATH", p):
             ctx.save_kubeconfig(SAMPLE_KUBECONFIG)
-        assert ctx.load_kubeconfig(p)["current-context"] == "prod"
+        assert oct(p.stat().st_mode)[-3:] == "600"
 
 
 class TestBackupKubeconfig:

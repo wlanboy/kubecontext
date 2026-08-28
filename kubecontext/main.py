@@ -4,10 +4,10 @@ import sys
 from urllib.parse import urlparse
 
 import questionary
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from ._console import console
 from .context import (
     delete_context_menu,
     export_contexts_menu,
@@ -19,6 +19,7 @@ from .context import (
 )
 from .tools_context import (
     cluster_server_map,
+    context_refs,
     get_list,
     load_kubeconfig,
     rename_config_for_host,
@@ -26,6 +27,7 @@ from .tools_context import (
     set_cluster_server_endpoint,
 )
 from .tools_ssh import (
+    SshContext,
     close_tunnel,
     download_remote_kubeconfig,
     find_free_local_port,
@@ -36,8 +38,6 @@ from .tools_ssh import (
     remote_host_for,
     remote_port_for,
 )
-
-console = Console()
 
 
 # ── SSH Import ────────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ def ssh_import_menu() -> None:
 
 # ── SSH Tunnels ───────────────────────────────────────────────────────────────
 
-def _ssh_contexts() -> list[dict]:
+def _ssh_contexts() -> list[SshContext]:
     """Return contexts whose name contains '@' (imported via SSH)."""
     config = load_kubeconfig()
     contexts = get_list(config, "contexts")
@@ -74,21 +74,21 @@ def _ssh_contexts() -> list[dict]:
         if "@" not in name:
             continue
         ssh_host, _ = name.split("@", 1)
-        cluster_ref  = (ctx.get("context") or {}).get("cluster", "")
-        server       = cluster_servers.get(cluster_ref, "")
-        parsed       = urlparse(server)
-        seed_host    = parsed.hostname or "localhost"
-        remote_host  = remote_host_for(name, seed_host)
-        port         = parsed.port
-        result.append({
-            "context":     name,
-            "ssh_host":    ssh_host,
-            "cluster":     cluster_ref,
-            "remote_host": remote_host,
-            "port":        port,
-            "remote_port": remote_port_for(name, port) if port else None,
-            "server":      server,
-        })
+        cluster_ref = context_refs(ctx).cluster
+        server      = cluster_servers.get(cluster_ref, "")
+        parsed      = urlparse(server)
+        seed_host   = parsed.hostname or "localhost"
+        remote_host = remote_host_for(name, seed_host)
+        port        = parsed.port
+        result.append(SshContext(
+            context=name,
+            ssh_host=ssh_host,
+            cluster=cluster_ref,
+            remote_host=remote_host,
+            port=port,
+            remote_port=remote_port_for(name, port) if port else None,
+            server=server,
+        ))
     return result
 
 
@@ -102,10 +102,10 @@ def ssh_tunnel_menu() -> None:
         active_tunnels = get_tunnels()
         tunnels_by_port = {t.local_port: t for t in active_tunnels}
 
-        def _matching_tunnel(c: dict, tunnels_by_port=tunnels_by_port):
+        def _matching_tunnel(c: SshContext, tunnels_by_port=tunnels_by_port):
             """Tunnel that actually forwards for this context (same SSH host + target)."""
-            t = tunnels_by_port.get(c["port"])
-            if t and t.host == c["ssh_host"] and t.remote_host == c["remote_host"]:
+            t = tunnels_by_port.get(c.port)
+            if t and t.host == c.ssh_host and t.remote_host == c.remote_host:
                 return t
             return None
 
@@ -117,20 +117,20 @@ def ssh_tunnel_menu() -> None:
         table.add_column("Tunnel")
 
         for c in ssh_ctxs:
-            if not c["port"]:
+            if not c.port:
                 status = "[yellow]? no port[/yellow]"
             elif _matching_tunnel(c):
                 status = "[green]● open[/green]"
-            elif c["port"] in tunnels_by_port:
+            elif c.port in tunnels_by_port:
                 status = "[yellow]○ port in use[/yellow]"
             else:
                 status = "[dim]○ closed[/dim]"
-            table.add_row("", c["context"], c["ssh_host"], c["server"], status)
+            table.add_row("", c.context, c.ssh_host, c.server, status)
 
         console.print(table)
         console.print()
 
-        openable   = [c for c in ssh_ctxs if c["port"] and not _matching_tunnel(c)]
+        openable   = [c for c in ssh_ctxs if c.port and not _matching_tunnel(c)]
         closeable  = [t for t in active_tunnels]
 
         choices = []
@@ -145,26 +145,26 @@ def ssh_tunnel_menu() -> None:
             break
 
         if action == "open":
-            opts = [questionary.Choice(c["context"], value=c) for c in openable]
+            opts = [questionary.Choice(c.context, value=c) for c in openable]
             opts += [questionary.Separator(), questionary.Choice("  Back", value=None)]
             selected = questionary.select("Open tunnel for:", choices=opts).ask()
             if not selected:
                 continue
-            local_port = find_free_local_port(selected["port"])
-            already_tunneled = urlparse(selected["server"]).hostname == "127.0.0.1"
-            if not already_tunneled or local_port != selected["port"]:
+            local_port = find_free_local_port(selected.port)
+            already_tunneled = urlparse(selected.server).hostname == "127.0.0.1"
+            if not already_tunneled or local_port != selected.port:
                 config = load_kubeconfig()
-                set_cluster_server_endpoint(config, selected["cluster"], "127.0.0.1", local_port)
+                set_cluster_server_endpoint(config, selected.cluster, "127.0.0.1", local_port)
                 save_kubeconfig(config)
                 console.print(
-                    f"[dim]{selected['context']} now points to 127.0.0.1:{local_port} "
-                    f"(tunneled via {selected['ssh_host']}) — kubeconfig updated[/dim]"
+                    f"[dim]{selected.context} now points to 127.0.0.1:{local_port} "
+                    f"(tunneled via {selected.ssh_host}) — kubeconfig updated[/dim]"
                 )
             tunnel = open_tunnel(
-                selected["ssh_host"],
+                selected.ssh_host,
                 local_port,
-                selected["remote_host"],
-                selected["remote_port"],
+                selected.remote_host,
+                selected.remote_port,
             )
             if tunnel:
                 console.print(f"[green]✓ Tunnel open: {tunnel.label}[/green]")

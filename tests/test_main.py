@@ -582,10 +582,10 @@ class TestSshContexts:
             with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
                 result = main._ssh_contexts()
         assert len(result) == 1
-        assert result[0]["context"] == "bastion@default"
-        assert result[0]["ssh_host"] == "bastion"
-        assert result[0]["remote_host"] == "192.168.1.1"
-        assert result[0]["port"] == 6443
+        assert result[0].context == "bastion@default"
+        assert result[0].ssh_host == "bastion"
+        assert result[0].remote_host == "192.168.1.1"
+        assert result[0].port == 6443
 
     def test_excludes_contexts_without_at(self, tmp_path):
         cfg = self._make_config(
@@ -606,7 +606,7 @@ class TestSshContexts:
         }
         with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
             result = main._ssh_contexts()
-        assert result[0]["port"] is None
+        assert result[0].port is None
 
     def test_handles_unknown_cluster_ref(self):
         cfg = {
@@ -618,8 +618,8 @@ class TestSshContexts:
         }
         with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
             result = main._ssh_contexts()
-        assert result[0]["server"] == ""
-        assert result[0]["remote_host"] == "localhost"
+        assert result[0].server == ""
+        assert result[0].remote_host == "localhost"
 
     def test_multiple_ssh_contexts_returned(self):
         cfg = {
@@ -640,7 +640,7 @@ class TestSshContexts:
         with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
             result = main._ssh_contexts()
         assert len(result) == 2
-        assert {r["ssh_host"] for r in result} == {"a", "b"}
+        assert {r.ssh_host for r in result} == {"a", "b"}
 
     def test_remote_host_survives_tunnel_rewrite_to_localhost(self, tmp_path):
         """Regression test: once a tunnel rewrites cluster.server to 127.0.0.1
@@ -655,11 +655,11 @@ class TestSshContexts:
         )
         with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
             first = main._ssh_contexts()
-        assert first[0]["remote_host"] == "192.168.1.1"
+        assert first[0].remote_host == "192.168.1.1"
 
         # Simulate what opening a tunnel does: rewrite the local kubeconfig's
         # cluster.server to point at the tunnel's local endpoint.
         cfg["clusters"][0]["cluster"]["server"] = "https://127.0.0.1:6443"
         with patch("kubecontext.main.load_kubeconfig", return_value=cfg):
             second = main._ssh_contexts()
-        assert second[0]["remote_host"] == "192.168.1.1"
+        assert second[0].remote_host == "192.168.1.1"

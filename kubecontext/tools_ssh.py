@@ -11,9 +11,8 @@ from pathlib import Path
 
 import paramiko
 import yaml
-from rich.console import Console
 
-console = Console()
+from ._console import console
 
 SSH_CONFIG_PATH  = Path.home() / ".ssh" / "config"
 TUNNEL_STATE_PATH = Path.home() / ".kube" / "kubecontext_tunnels.json"
@@ -24,6 +23,21 @@ REMOTE_HOST_MAP_PATH = Path.home() / ".kube" / "kubecontext_remote_hosts.json"
 # host) before we trust the tunnel is actually up.
 _TUNNEL_STARTUP_CHECK_SECONDS = 0.6
 _TUNNEL_STARTUP_CHECK_INTERVAL = 0.1
+
+
+# ── SSH-Imported Contexts ─────────────────────────────────────────────────────
+
+@dataclass
+class SshContext:
+    """A kubeconfig context imported via SSH (name contains '@'), with its
+    tunnel-relevant details resolved."""
+    context: str
+    ssh_host: str
+    cluster: str
+    remote_host: str
+    port: int | None
+    remote_port: int | None
+    server: str
 
 
 # ── SSH Tunnel Management ─────────────────────────────────────────────────────
@@ -173,6 +187,20 @@ def find_free_local_port(preferred: int) -> int:
         return s.getsockname()[1]
 
 
+def _remember_first_seen(path: Path, key: str, current_value):
+    """Return the value first recorded for `key` in the JSON map at `path`,
+    recording `current_value` if none is yet stored."""
+    try:
+        m = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        m = {}
+    if key not in m:
+        m[key] = current_value
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(m, indent=2))
+    return m[key]
+
+
 def remote_port_for(context_name: str, current_port: int) -> int:
     """Return the true remote-side port to forward to for a context's tunnel.
 
@@ -182,15 +210,7 @@ def remote_port_for(context_name: str, current_port: int) -> int:
     unrecoverable on the next read, so the first port ever seen for a context
     is remembered here and used as the ssh -L remote-side port from then on.
     """
-    try:
-        m = json.loads(REMOTE_PORT_MAP_PATH.read_text())
-    except (OSError, json.JSONDecodeError):
-        m = {}
-    if context_name not in m:
-        m[context_name] = current_port
-        REMOTE_PORT_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
-        REMOTE_PORT_MAP_PATH.write_text(json.dumps(m, indent=2))
-    return m[context_name]
+    return _remember_first_seen(REMOTE_PORT_MAP_PATH, context_name, current_port)
 
 
 def remote_host_for(context_name: str, current_host: str) -> str:
@@ -203,15 +223,7 @@ def remote_host_for(context_name: str, current_host: str) -> str:
     host ever seen for a context is remembered here and used as the ssh -L
     remote-side host from then on.
     """
-    try:
-        m = json.loads(REMOTE_HOST_MAP_PATH.read_text())
-    except (OSError, json.JSONDecodeError):
-        m = {}
-    if context_name not in m:
-        m[context_name] = current_host
-        REMOTE_HOST_MAP_PATH.parent.mkdir(parents=True, exist_ok=True)
-        REMOTE_HOST_MAP_PATH.write_text(json.dumps(m, indent=2))
-    return m[context_name]
+    return _remember_first_seen(REMOTE_HOST_MAP_PATH, context_name, current_host)
 
 
 def parse_ssh_config() -> list[str]:
