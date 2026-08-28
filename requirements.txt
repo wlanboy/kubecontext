@@ -6,7 +6,7 @@ cffi==2.1.1
     # via
     #   cryptography
     #   pynacl
-cryptography==50.0.0
+cryptography==50.0.1
     # via paramiko
 invoke==3.0.3
     # via paramiko
@@ -20,7 +20,7 @@ prompt-toolkit==3.0.53
     # via questionary
 pycparser==3.0
     # via cffi
-pygments==2.20.0
+pygments==2.21.0
     # via rich
 pynacl==1.6.2
     # via paramiko
@@ -30,5 +30,5 @@ questionary==2.1.1
     # via kubecontext (pyproject.toml)
 rich==15.0.0
     # via kubecontext (pyproject.toml)
-wcwidth==0.8.2
+wcwidth==0.8.3
     # via prompt-toolkit
