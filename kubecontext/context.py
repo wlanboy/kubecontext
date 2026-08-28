@@ -23,7 +23,6 @@ from .tools_context import (
     save_kubeconfig,
 )
 
-
 # ── Overview Table ────────────────────────────────────────────────────────────
 
 def show_contexts_table() -> None:
