@@ -8,7 +8,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import questionary
-import yaml
 from rich.syntax import Syntax
 from rich.table import Table
 
@@ -196,7 +195,7 @@ def export_contexts_menu() -> None:
     console.print(f"[green]✓ Exported {len(selected_names)} context(s) to {out_path}[/green]")
 
 
-# ── Import from File ─────────────────────────────────────────────────────────
+# ── Import ────────────────────────────────────────────────────────────────────
 
 def _maybe_repoint_localhost(remote: dict, default_host: str | None) -> dict:
     """If a cluster's API endpoint is 127.0.0.1, offer to replace it with the real host IP.
@@ -279,25 +278,6 @@ def import_and_merge(
     tmp_path.unlink(missing_ok=True)
 
 
-def import_file_menu() -> None:
-    path_str = questionary.text("Path to kubeconfig file:").ask()
-    if not path_str:
-        return
-
-    path = Path(path_str.strip()).expanduser()
-    if not path.exists():
-        console.print(f"[red]✗ File not found: {path}[/red]")
-        return
-
-    try:
-        remote = load_kubeconfig(path)
-    except (OSError, yaml.YAMLError) as exc:
-        console.print(f"[red]✗ Failed to load {path}: {exc}[/red]")
-        return
-
-    import_and_merge(remote, empty_message="No contexts found in file.")
-
-
 # ── Validate Contexts ─────────────────────────────────────────────────────────
 
 def _check_context(name: str) -> str:
@@ -332,9 +312,9 @@ def validate_contexts_menu() -> None:
     cluster_servers = cluster_server_map(config, default="?")
     names = [ctx["name"] for ctx in contexts]
 
-    with console.status(f"Checking {len(names)} context(s)…"):
-        with ThreadPoolExecutor(max_workers=min(len(names), 10)) as executor:
-            statuses = list(executor.map(_check_context, names))
+    with console.status(f"Checking {len(names)} context(s)…"), \
+         ThreadPoolExecutor(max_workers=min(len(names), 10)) as executor:
+        statuses = list(executor.map(_check_context, names))
 
     table = Table(title="Context Validation", show_header=True, header_style="bold")
     table.add_column("Context", style="cyan", no_wrap=True)
