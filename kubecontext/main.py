@@ -26,6 +26,7 @@ from .tools_ssh import (
     load_tunnels,
     open_tunnel,
     parse_ssh_config,
+    resolve_ssh_target,
     ssh_contexts,
 )
 
@@ -47,7 +48,7 @@ def ssh_import_menu() -> None:
         return
 
     renamed = rename_config_for_host(remote, hostname)
-    import_and_merge(renamed)
+    import_and_merge(renamed, default_host=resolve_ssh_target(hostname))
 
 
 # ── SSH Tunnels ───────────────────────────────────────────────────────────────

@@ -279,6 +279,13 @@ def _paramiko_host_config(hostname: str) -> dict:
     return cfg.lookup(hostname)
 
 
+def resolve_ssh_target(hostname: str) -> str:
+    """Return the address ssh actually connects to for `hostname` (its HostName
+    in ~/.ssh/config, or `hostname` itself if unset) — a sensible default when
+    a remote kubeconfig's server needs to be repointed away from 127.0.0.1."""
+    return _paramiko_host_config(hostname).get("hostname", hostname)
+
+
 def download_remote_kubeconfig(hostname: str) -> dict | None:
     """SSH into hostname and return parsed ~/.kube/config, or None on error."""
     host_cfg = _paramiko_host_config(hostname)

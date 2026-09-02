@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 import questionary
 import yaml
@@ -196,7 +197,39 @@ def export_contexts_menu() -> None:
 
 # ── Import from File ─────────────────────────────────────────────────────────
 
-def import_and_merge(remote: dict, empty_message: str = "No contexts found.") -> None:
+def _maybe_repoint_localhost(remote: dict, default_host: str | None) -> dict:
+    """If a cluster's API endpoint is 127.0.0.1, offer to replace it with the real host IP.
+
+    A kubeconfig pulled from a remote machine often has its server set to
+    127.0.0.1 — correct on that machine, but unreachable once imported here.
+    """
+    for cluster in get_list(remote, "clusters"):
+        server = (cluster.get("cluster") or {}).get("server", "")
+        parsed = urlparse(server)
+        if parsed.hostname != "127.0.0.1" or parsed.port is None:
+            continue
+
+        if not questionary.confirm(
+            f"Cluster '{cluster['name']}' points at 127.0.0.1 — replace with the host IP?",
+            default=True,
+        ).ask():
+            continue
+
+        host_ip = questionary.text("Host IP:", default=default_host or "").ask()
+        if not host_ip:
+            continue
+
+        tools_context.set_cluster_server_endpoint(remote, cluster["name"], host_ip.strip(), parsed.port)
+        console.print(f"[green]✓ {cluster['name']}: 127.0.0.1 → {host_ip.strip()}:{parsed.port}[/green]")
+
+    return remote
+
+
+def import_and_merge(
+    remote: dict,
+    empty_message: str = "No contexts found.",
+    default_host: str | None = None,
+) -> None:
     """Preview `remote` merged into the current kubeconfig and write it on confirm."""
     all_names = [c["name"] for c in get_list(remote, "contexts")]
     if not all_names:
@@ -208,6 +241,8 @@ def import_and_merge(remote: dict, empty_message: str = "No contexts found.") ->
         if not selected_names:
             return
         remote = filter_contexts(remote, selected_names)
+
+    remote = _maybe_repoint_localhost(remote, default_host)
 
     new_names = [c["name"] for c in get_list(remote, "contexts")]
 
