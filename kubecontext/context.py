@@ -3,6 +3,7 @@
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -299,6 +300,24 @@ def import_file_menu() -> None:
 
 # ── Validate Contexts ─────────────────────────────────────────────────────────
 
+def _check_context(name: str) -> str:
+    try:
+        result = subprocess.run(
+            ["kubectl", "cluster-info", "--context", name],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if result.returncode == 0:
+            return "[green]✓ OK[/green]"
+        lines = (result.stderr or result.stdout).strip().splitlines()
+        msg   = lines[0][:70] if lines else "failed"
+        return f"[red]✗ {msg}[/red]"
+    except subprocess.TimeoutExpired:
+        return "[red]✗ timeout[/red]"
+
+
 def validate_contexts_menu() -> None:
     if not shutil.which("kubectl"):
         console.print("[red]kubectl not found in PATH[/red]")
@@ -311,34 +330,20 @@ def validate_contexts_menu() -> None:
         return
 
     cluster_servers = cluster_server_map(config, default="?")
+    names = [ctx["name"] for ctx in contexts]
+
+    with console.status(f"Checking {len(names)} context(s)…"):
+        with ThreadPoolExecutor(max_workers=min(len(names), 10)) as executor:
+            statuses = list(executor.map(_check_context, names))
 
     table = Table(title="Context Validation", show_header=True, header_style="bold")
     table.add_column("Context", style="cyan", no_wrap=True)
     table.add_column("Server", style="dim")
     table.add_column("Status")
 
-    for ctx in contexts:
+    for ctx, status in zip(contexts, statuses):
         name   = ctx["name"]
         server = cluster_servers.get(context_refs(ctx).cluster, "?")
-
-        with console.status(f"Checking [cyan]{name}[/cyan]…"):
-            try:
-                result = subprocess.run(
-                    ["kubectl", "cluster-info", "--context", name],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                    check=False,
-                )
-                if result.returncode == 0:
-                    status = "[green]✓ OK[/green]"
-                else:
-                    lines = (result.stderr or result.stdout).strip().splitlines()
-                    msg   = lines[0][:70] if lines else "failed"
-                    status = f"[red]✗ {msg}[/red]"
-            except subprocess.TimeoutExpired:
-                status = "[red]✗ timeout[/red]"
-
         table.add_row(name, server, status)
 
     console.print(table)
