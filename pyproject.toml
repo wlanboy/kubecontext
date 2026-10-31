@@ -11,10 +11,10 @@ requires-python = ">=3.14"
 license = {text = "MIT"}
 classifiers = ["Private :: Do Not Upload"]
 dependencies = [
-    "paramiko>=4.0.0",
-    "questionary>=2.0",
-    "rich>=14.3.3",
-    "pyyaml>=6.0",
+    "paramiko>=5.1.0",
+    "questionary>=2.1.1",
+    "rich>=15.0.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]
@@ -28,7 +28,7 @@ pythonpath = ["."]
 
 [dependency-groups]
 dev = [
-    "pyright>=1.1.408",
-    "pytest>=9.0.2",
-    "ruff>=0.15.8",
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
 ]
